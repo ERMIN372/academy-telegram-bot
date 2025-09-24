@@ -2,3 +2,8 @@ service-account.json
 *.gserviceaccount.com.json
 .env
 .env*
+service-account.json
+.env
+.env*
+data/
+*.sqlite3
