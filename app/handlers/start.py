@@ -8,7 +8,7 @@ from aiogram.dispatcher import FSMContext
 
 from app.config import get_settings
 from app.keyboards.common import kb_after_coupon, kb_check_sub, kb_get_gift, kb_subscribe
-from app.services import coupons, stats, sub_check
+from app.services import coupons, reminders, stats, sub_check
 from app.services.deep_link import parse_start_payload
 from app.storage import db
 
@@ -70,6 +70,7 @@ async def issue_coupon(message: types.Message, user_id: int, campaign: str) -> N
         code = stored["code"]
         await stats.log_event(user_id, campaign, "gift_repeat", {"code": code})
         await _send_coupon(message, code, campaign)
+        await reminders.schedule_reminder(user_id, campaign, code)
         return
 
     sheet_coupon = await coupons.get_user_coupon(user_id, campaign)
@@ -78,6 +79,7 @@ async def issue_coupon(message: types.Message, user_id: int, campaign: str) -> N
         await db.insert_coupon(user_id, campaign, code)
         await stats.log_event(user_id, campaign, "gift_repeat", {"code": code})
         await _send_coupon(message, code, campaign)
+        await reminders.schedule_reminder(user_id, campaign, code)
         return
 
     coupon = await coupons.find_first_free_coupon(campaign)
@@ -97,6 +99,7 @@ async def issue_coupon(message: types.Message, user_id: int, campaign: str) -> N
     await db.insert_coupon(user_id, campaign, code)
     await stats.log_event(user_id, campaign, "gift", {"code": code})
     await _send_coupon(message, code, campaign)
+    await reminders.schedule_reminder(user_id, campaign, code)
 
 
 async def callback_get_gift(call: types.CallbackQuery, state: FSMContext) -> None:

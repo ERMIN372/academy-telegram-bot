@@ -47,5 +47,11 @@ async def get_user_coupon(user_id: int, campaign: str | None = None) -> Optional
         code = (record.get("code") or "").strip()
         if not code:
             continue
-        return {"row": record["row"], "code": code, "campaign": record_campaign}
+        return {
+            "row": record["row"],
+            "code": code,
+            "campaign": record_campaign,
+            "used_at": record.get("used_at"),
+            "status": record.get("status"),
+        }
     return None

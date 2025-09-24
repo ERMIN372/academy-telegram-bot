@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from aiogram import types
+from aiogram import Dispatcher, types
 from aiogram.utils import executor
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -11,6 +11,7 @@ import uvicorn
 
 from app.bot import bot, dp
 from app.config import get_settings
+from app.services import reminders
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,16 @@ async def tg_webhook(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+@app.on_event("startup")
+async def on_app_startup() -> None:
+    await reminders.on_startup(bot)
+
+
+@app.on_event("shutdown")
+async def on_app_shutdown() -> None:
+    await reminders.on_shutdown()
+
+
 async def setup_webhook() -> None:
     settings = get_settings()
     await bot.delete_webhook(drop_pending_updates=True)
@@ -52,6 +63,14 @@ async def drop_webhook() -> None:
     logger.info("Webhook dropped; switching to polling")
 
 
+async def _on_polling_startup(dp: Dispatcher) -> None:
+    await reminders.on_startup(dp.bot)
+
+
+async def _on_polling_shutdown(dp: Dispatcher) -> None:
+    await reminders.on_shutdown()
+
+
 def run() -> None:
     settings = get_settings()
     if settings.mode == "webhook":
@@ -62,7 +81,14 @@ def run() -> None:
         asyncio.set_event_loop(loop)
         loop.run_until_complete(drop_webhook())
         try:
-            executor.start_polling(dp, skip_updates=False, reset_webhook=False, loop=loop)
+            executor.start_polling(
+                dp,
+                skip_updates=False,
+                reset_webhook=False,
+                loop=loop,
+                on_startup=[_on_polling_startup],
+                on_shutdown=[_on_polling_shutdown],
+            )
         finally:
             loop.run_until_complete(dp.storage.close())
             loop.run_until_complete(dp.storage.wait_closed())

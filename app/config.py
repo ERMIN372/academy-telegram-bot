@@ -26,6 +26,20 @@ class Settings(BaseSettings):
     google_service_json_b64: str = Field(alias="GOOGLE_SERVICE_JSON_B64")
     port: int = Field(default=8000, alias="PORT")
     leads_upsert: bool = Field(default=False, alias="LEADS_UPSERT")
+    reminder_enabled: bool = Field(default=False, alias="REMINDER_ENABLED")
+    reminder_delay_hours: int = Field(default=6, alias="REMINDER_DELAY_HOURS")
+    reminder_only_if_no_lead: bool = Field(default=True, alias="REMINDER_ONLY_IF_NO_LEAD")
+    reminder_only_if_not_used: bool = Field(default=True, alias="REMINDER_ONLY_IF_NOT_USED")
+    reminder_work_hours: tuple[int, int] = Field(default=(10, 20), alias="REMINDER_WORK_HOURS")
+    reminder_text: str = Field(
+        default=(
+            "Хэй! Подарок всё ещё ждёт 😊 Используй код <b>{code}</b>, "
+            "чтобы забрать скидку. Нужна подсказка? Нажми «Оставить контакт»."
+        ),
+        alias="REMINDER_TEXT",
+    )
+    reminder_max_per_user: int = Field(default=1, alias="REMINDER_MAX_PER_USER")
+    reminder_timezone: str = Field(default="Europe/Moscow", alias="REMINDER_TIMEZONE")
 
     @field_validator("mode")
     @classmethod
@@ -50,14 +64,58 @@ class Settings(BaseSettings):
             return None
         return int(value)
 
-    @field_validator("leads_upsert", mode="before")
-    @classmethod
-    def parse_leads_upsert(cls, value: Any) -> bool:
+    @staticmethod
+    def _parse_bool(value: Any, default: bool = False) -> bool:
         if isinstance(value, bool):
             return value
         if value in (None, ""):
-            return False
+            return default
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    @field_validator("leads_upsert", mode="before")
+    @classmethod
+    def parse_leads_upsert(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
+    @field_validator(
+        "reminder_enabled",
+        "reminder_only_if_no_lead",
+        "reminder_only_if_not_used",
+        mode="before",
+    )
+    @classmethod
+    def parse_reminder_flags(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
+    @field_validator("reminder_delay_hours")
+    @classmethod
+    def validate_delay(cls, value: int) -> int:
+        return max(0, value)
+
+    @field_validator("reminder_max_per_user")
+    @classmethod
+    def validate_max_per_user(cls, value: int) -> int:
+        return max(0, value)
+
+    @field_validator("reminder_work_hours", mode="before")
+    @classmethod
+    def parse_work_hours(cls, value: Any) -> tuple[int, int]:
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            start, end = int(value[0]), int(value[1])
+        elif isinstance(value, str):
+            parts = [part.strip() for part in value.replace("–", "-").split("-") if part.strip()]
+            if len(parts) != 2:
+                return (10, 20)
+            start, end = int(parts[0]), int(parts[1])
+        else:
+            return (10, 20)
+        if start == end:
+            end = (end + 1) % 24
+        if start < 0 or start > 23 or end < 0 or end > 24:
+            return (10, 20)
+        if start > end:
+            start, end = end, start
+        return (start, end)
 
     @cached_property
     def google_service_credentials(self) -> Dict[str, Any]:
