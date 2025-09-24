@@ -7,6 +7,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from app.config import get_settings
 from app.handlers import admin, contacts, fun_interactive, lottery, start
+from app.services import alerts
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,3 +23,4 @@ contacts.register(dp)
 lottery.register(dp)
 fun_interactive.register(dp)
 admin.register(dp)
+alerts.setup_error_handler(dp)

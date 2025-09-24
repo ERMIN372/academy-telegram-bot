@@ -8,7 +8,7 @@ from aiogram.dispatcher import FSMContext
 
 from app.config import get_settings
 from app.keyboards.common import kb_after_coupon, kb_check_sub, kb_get_gift, kb_subscribe
-from app.services import coupons, reminders, stats, sub_check
+from app.services import alerts, coupons, reminders, stats, sub_check
 from app.services.deep_link import parse_start_payload
 from app.storage import db
 
@@ -82,6 +82,7 @@ async def issue_coupon(
             "gift_repeat",
             {"code": code, "coupon_campaign": coupon_campaign},
         )
+        await alerts.reset_no_coupons(coupon_campaign)
         await _send_coupon(message, code, coupon_campaign)
         await reminders.schedule_reminder(user_id, coupon_campaign, code)
         return True
@@ -96,6 +97,7 @@ async def issue_coupon(
             "gift_repeat",
             {"code": code, "coupon_campaign": coupon_campaign},
         )
+        await alerts.reset_no_coupons(coupon_campaign)
         await _send_coupon(message, code, coupon_campaign)
         await reminders.schedule_reminder(user_id, coupon_campaign, code)
         return True
@@ -107,12 +109,7 @@ async def issue_coupon(
             no_coupons_message
             or "Упс! Похоже, подарков временно нет. Мы уже работаем над этим."
         )
-        settings = get_settings()
-        if settings.admin_chat_id:
-            await message.bot.send_message(
-                settings.admin_chat_id,
-                f"Нет купонов для кампании {coupon_campaign}. Пользователь {user_id}",
-            )
+        await alerts.notify_no_coupons(message.bot, campaign=coupon_campaign)
         return False
 
     reservation = await coupons.reserve_coupon(coupon["row"], user_id, coupon["code"])
@@ -124,6 +121,7 @@ async def issue_coupon(
         "gift",
         {"code": code, "coupon_campaign": coupon_campaign},
     )
+    await alerts.reset_no_coupons(coupon_campaign)
     await _send_coupon(message, code, coupon_campaign)
     await reminders.schedule_reminder(user_id, coupon_campaign, code)
     return True

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     mode: str = Field(default="polling", alias="MODE")
     webhook_url: str | None = Field(default=None, alias="WEBHOOK_URL")
     secret_token: str = Field(alias="SECRET_TOKEN")
-    admin_chat_id: int | None = Field(default=None, alias="ADMIN_CHAT_ID")
+    admin_chat_id_raw: str | None = Field(default=None, alias="ADMIN_CHAT_ID")
     channel_username: str = Field(alias="CHANNEL_USERNAME")
     google_sheets_id: str = Field(alias="GOOGLE_SHEETS_ID")
     google_service_json_b64: str = Field(alias="GOOGLE_SERVICE_JSON_B64")
@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     lottery_title: str = Field(default="Выбирай окно 🎁", alias="LOTTERY_TITLE")
     lottery_button_emoji: str = Field(default="🎯", alias="LOTTERY_BUTTON_EMOJI")
 
+    alerts_enabled: bool = Field(default=False, alias="ALERTS_ENABLED")
+    alerts_mention: str | None = Field(default=None, alias="ALERTS_MENTION")
+    alerts_rate_limit: int = Field(default=30, alias="ALERTS_RATE_LIMIT")
+    alerts_bundle_window: int = Field(default=60, alias="ALERTS_BUNDLE_WINDOW")
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, value: str | None) -> str:
@@ -68,12 +73,42 @@ class Settings(BaseSettings):
             username = f"@{username}"
         return username
 
-    @field_validator("admin_chat_id", mode="before")
-    @classmethod
-    def normalize_admin_chat_id(cls, value: Any) -> int | None:
-        if value in (None, "", 0, "0"):
+    @cached_property
+    def admin_chat_ids(self) -> tuple[int, ...]:
+        raw_value = self.admin_chat_id_raw
+        if not raw_value:
+            return ()
+        if isinstance(raw_value, (list, tuple)):
+            values = [str(item).strip() for item in raw_value]
+        else:
+            values = [part.strip() for part in str(raw_value).replace(";", ",").split(",")]
+        result: list[int] = []
+        for item in values:
+            if not item:
+                continue
+            if item.startswith("chat:") or item.startswith("user:"):
+                item = item.split(":", 1)[1].strip()
+            if not item or item in {"0", "-0"}:
+                continue
+            try:
+                result.append(int(item))
+            except ValueError:
+                continue
+        seen: set[int] = set()
+        unique: list[int] = []
+        for value in result:
+            if value in seen:
+                continue
+            seen.add(value)
+            unique.append(value)
+        return tuple(unique)
+
+    @property
+    def admin_chat_id(self) -> int | None:
+        ids = self.admin_chat_ids
+        if not ids:
             return None
-        return int(value)
+        return ids[0]
 
     @staticmethod
     def _parse_bool(value: Any, default: bool = False) -> bool:
@@ -86,6 +121,11 @@ class Settings(BaseSettings):
     @field_validator("leads_upsert", mode="before")
     @classmethod
     def parse_leads_upsert(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
+    @field_validator("alerts_enabled", mode="before")
+    @classmethod
+    def parse_alerts_enabled(cls, value: Any) -> bool:
         return cls._parse_bool(value)
 
     @field_validator(
@@ -102,6 +142,16 @@ class Settings(BaseSettings):
     @classmethod
     def parse_lottery_enabled(cls, value: Any) -> bool:
         return cls._parse_bool(value)
+
+    @field_validator("alerts_rate_limit")
+    @classmethod
+    def validate_alerts_rate_limit(cls, value: int) -> int:
+        return max(0, value)
+
+    @field_validator("alerts_bundle_window")
+    @classmethod
+    def validate_alerts_bundle_window(cls, value: int) -> int:
+        return max(0, value)
 
     @field_validator("reminder_delay_hours")
     @classmethod

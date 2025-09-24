@@ -41,7 +41,11 @@ app/
 - `MODE`: "polling" (default) or "webhook"
 - `WEBHOOK_URL`: Public URL for webhook mode
 - `SECRET_TOKEN`: Security token for webhook verification
-- `ADMIN_CHAT_ID`: Administrator chat ID for notifications
+- `ADMIN_CHAT_ID`: Administrator chat ID(s) for notifications (comma-separated for fallback)
+- `ALERTS_ENABLED`: Toggle system alerts on/off (`true`/`false`)
+- `ALERTS_MENTION`: Optional mention (`@username`) prefixed to alerts
+- `ALERTS_RATE_LIMIT`: Minimum interval between identical alerts (seconds)
+- `ALERTS_BUNDLE_WINDOW`: Error aggregation window (seconds)
 - `CHANNEL_USERNAME`: Channel for subscription verification
 - `GOOGLE_SHEETS_ID`: Google Sheets table ID
 - `GOOGLE_SERVICE_JSON_B64`: Base64 encoded service account JSON
