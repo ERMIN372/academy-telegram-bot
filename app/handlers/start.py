@@ -62,44 +62,71 @@ async def _send_coupon(message: types.Message, code: str, campaign: str) -> None
     await message.answer(text, reply_markup=kb_after_coupon(campaign))
 
 
-async def issue_coupon(message: types.Message, user_id: int, campaign: str) -> None:
-    campaign = campaign or "default"
+async def issue_coupon(
+    message: types.Message,
+    user_id: int,
+    campaign: str,
+    *,
+    stats_campaign: str | None = None,
+    no_coupons_message: str | None = None,
+) -> bool:
+    coupon_campaign = campaign or "default"
+    stats_campaign = stats_campaign or coupon_campaign
 
-    stored = await db.fetch_user_coupon(user_id, campaign)
+    stored = await db.fetch_user_coupon(user_id, coupon_campaign)
     if stored and stored.get("code"):
         code = stored["code"]
-        await stats.log_event(user_id, campaign, "gift_repeat", {"code": code})
-        await _send_coupon(message, code, campaign)
-        await reminders.schedule_reminder(user_id, campaign, code)
-        return
+        await stats.log_event(
+            user_id,
+            stats_campaign,
+            "gift_repeat",
+            {"code": code, "coupon_campaign": coupon_campaign},
+        )
+        await _send_coupon(message, code, coupon_campaign)
+        await reminders.schedule_reminder(user_id, coupon_campaign, code)
+        return True
 
-    sheet_coupon = await coupons.get_user_coupon(user_id, campaign)
+    sheet_coupon = await coupons.get_user_coupon(user_id, coupon_campaign)
     if sheet_coupon and sheet_coupon.get("code"):
         code = sheet_coupon["code"]
-        await db.insert_coupon(user_id, campaign, code)
-        await stats.log_event(user_id, campaign, "gift_repeat", {"code": code})
-        await _send_coupon(message, code, campaign)
-        await reminders.schedule_reminder(user_id, campaign, code)
-        return
+        await db.insert_coupon(user_id, coupon_campaign, code)
+        await stats.log_event(
+            user_id,
+            stats_campaign,
+            "gift_repeat",
+            {"code": code, "coupon_campaign": coupon_campaign},
+        )
+        await _send_coupon(message, code, coupon_campaign)
+        await reminders.schedule_reminder(user_id, coupon_campaign, code)
+        return True
 
-    coupon = await coupons.find_first_free_coupon(campaign)
+    coupon = await coupons.find_first_free_coupon(coupon_campaign)
     if not coupon or not coupon.get("code"):
-        await stats.log_event(user_id, campaign, "no_coupons")
-        await message.answer("Упс! Похоже, подарков временно нет. Мы уже работаем над этим.")
+        await stats.log_event(user_id, stats_campaign, "no_coupons", {"coupon_campaign": coupon_campaign})
+        await message.answer(
+            no_coupons_message
+            or "Упс! Похоже, подарков временно нет. Мы уже работаем над этим."
+        )
         settings = get_settings()
         if settings.admin_chat_id:
             await message.bot.send_message(
                 settings.admin_chat_id,
-                f"Нет купонов для кампании {campaign}. Пользователь {user_id}",
+                f"Нет купонов для кампании {coupon_campaign}. Пользователь {user_id}",
             )
-        return
+        return False
 
     reservation = await coupons.reserve_coupon(coupon["row"], user_id, coupon["code"])
     code = reservation["code"]
-    await db.insert_coupon(user_id, campaign, code)
-    await stats.log_event(user_id, campaign, "gift", {"code": code})
-    await _send_coupon(message, code, campaign)
-    await reminders.schedule_reminder(user_id, campaign, code)
+    await db.insert_coupon(user_id, coupon_campaign, code)
+    await stats.log_event(
+        user_id,
+        stats_campaign,
+        "gift",
+        {"code": code, "coupon_campaign": coupon_campaign},
+    )
+    await _send_coupon(message, code, coupon_campaign)
+    await reminders.schedule_reminder(user_id, coupon_campaign, code)
+    return True
 
 
 async def callback_get_gift(call: types.CallbackQuery, state: FSMContext) -> None:
@@ -114,7 +141,9 @@ async def callback_get_gift(call: types.CallbackQuery, state: FSMContext) -> Non
             reply_markup=kb_check_sub(campaign),
         )
         return
-    await issue_coupon(call.message, call.from_user.id, campaign)
+    from app.handlers import lottery as lottery_handlers
+
+    await lottery_handlers.present_lottery(call.message, call.from_user.id, campaign)
 
 
 async def callback_leave_phone(call: types.CallbackQuery, state: FSMContext) -> None:

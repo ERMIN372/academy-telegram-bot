@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from app.config import get_settings
-from app.handlers import admin, contacts, fun_interactive, mailing_lottery, start
+from app.handlers import admin, contacts, fun_interactive, lottery, start
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +19,6 @@ dp = Dispatcher(bot, storage=MemoryStorage())
 
 start.register(dp)
 contacts.register(dp)
-mailing_lottery.register(dp)
+lottery.register(dp)
 fun_interactive.register(dp)
 admin.register(dp)
