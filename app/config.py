@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     lottery_cooldown_days: int = Field(default=1, alias="LOTTERY_COOLDOWN_DAYS")
     lottery_title: str = Field(default="Выбирай окно 🎁", alias="LOTTERY_TITLE")
     lottery_button_emoji: str = Field(default="🎯", alias="LOTTERY_BUTTON_EMOJI")
+    lottery_button_label: str = Field(default="🎲 Лотерея", alias="LOTTERY_BTN_LABEL")
+    draw_prefix: str = Field(default="draw_", alias="DRAW_PREFIX")
+    lottery_ab_test: bool = Field(default=False, alias="LOTTERY_A_B_TEST")
 
     alerts_enabled: bool = Field(default=False, alias="ALERTS_ENABLED")
     alerts_mention: str | None = Field(default=None, alias="ALERTS_MENTION")
@@ -141,6 +144,11 @@ class Settings(BaseSettings):
     @field_validator("lottery_enabled", mode="before")
     @classmethod
     def parse_lottery_enabled(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
+    @field_validator("lottery_ab_test", mode="before")
+    @classmethod
+    def parse_lottery_ab_test(cls, value: Any) -> bool:
         return cls._parse_bool(value)
 
     @field_validator("alerts_rate_limit")
@@ -257,6 +265,12 @@ class Settings(BaseSettings):
     @classmethod
     def validate_lottery_cooldown(cls, value: int) -> int:
         return max(0, value)
+
+    @field_validator("draw_prefix")
+    @classmethod
+    def normalize_draw_prefix(cls, value: str) -> str:
+        prefix = (value or "").strip()
+        return prefix or "draw_"
 
     @cached_property
     def google_service_credentials(self) -> Dict[str, Any]:

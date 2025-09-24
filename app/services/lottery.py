@@ -4,7 +4,7 @@ import datetime as dt
 import random
 import uuid
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from app.config import get_settings
 from app.storage import db
@@ -22,6 +22,9 @@ class LotteryConfig:
     cooldown_days: int
     title: str
     button_emoji: str
+    button_label: str
+    draw_prefix: str
+    ab_test_enabled: bool
 
 
 def _normalized_weights(results: List[str], weights: List[float]) -> List[float]:
@@ -51,23 +54,47 @@ def get_config() -> LotteryConfig:
         cooldown_days=settings.lottery_cooldown_days,
         title=settings.lottery_title,
         button_emoji=settings.lottery_button_emoji or "🎯",
+        button_label=settings.lottery_button_label or "🎲 Лотерея",
+        draw_prefix=settings.draw_prefix or "draw_",
+        ab_test_enabled=settings.lottery_ab_test,
     )
 
 
-def choose_result(config: LotteryConfig) -> str:
+def get_user_bucket(user_id: int) -> str:
+    return "A" if user_id % 2 == 0 else "B"
+
+
+def should_show_button(user_id: int) -> Tuple[bool, str | None]:
+    config = get_config()
+    if not config.ab_test_enabled:
+        return True, None
+    bucket = get_user_bucket(user_id)
+    return bucket == "A", bucket
+
+
+def choose_result(config: LotteryConfig) -> Tuple[str, int, float]:
     if not config.results:
         raise RuntimeError("LOTTERY_RESULTS is not configured")
     weights = _normalized_weights(config.results, config.weights)
     total = sum(weights)
     if total <= 0:
-        return random.choice(config.results)
+        index = random.randrange(len(config.results))
+        return config.results[index], index, 0.0
     rnd = random.uniform(0, total)
     upto = 0.0
-    for result, weight in zip(config.results, weights):
+    for index, (result, weight) in enumerate(zip(config.results, weights)):
         upto += weight
         if rnd <= upto:
-            return result
-    return config.results[-1]
+            return result, index, weight
+    last_index = len(config.results) - 1
+    return config.results[last_index], last_index, weights[last_index] if weights else 0.0
+
+
+def weight_share(config: LotteryConfig, weight: float) -> float:
+    total = sum(config.weights)
+    if total <= 0:
+        return 0.0
+    return weight / total
 
 
 @dataclass

@@ -21,7 +21,14 @@ async def cmd_fortune(message: types.Message, state: FSMContext) -> None:
     campaign = parse_start_payload(message.text)
     await state.update_data(campaign=campaign)
     fortune = random.choice(FORTUNES)
-    await stats.log_event(message.from_user.id, campaign, "fortune", {"fortune": fortune})
+    username = message.from_user.username if message.from_user else None
+    await stats.log_event(
+        message.from_user.id,
+        campaign,
+        "fortune",
+        {"fortune": fortune},
+        username=username,
+    )
     await message.answer(
         f"🔮 {fortune}\nГотов забрать подарок?",
         reply_markup=kb_get_gift(campaign),
