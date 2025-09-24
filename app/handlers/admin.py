@@ -8,7 +8,9 @@ from app.services import sheets
 
 def _is_admin(user_id: int) -> bool:
     settings = get_settings()
-    return settings.admin_chat_id and int(settings.admin_chat_id) == user_id
+    if not settings.admin_chat_ids:
+        return False
+    return user_id in settings.admin_chat_ids
 
 
 async def cmd_ping(message: types.Message) -> None:
