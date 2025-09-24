@@ -6,7 +6,9 @@ import html
 import logging
 import uuid
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiogram import Bot, types
 from aiogram.dispatcher import Dispatcher
@@ -17,6 +19,8 @@ from app.config import get_settings
 from app.services import stats
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_ALERT_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 @dataclass
@@ -71,15 +75,16 @@ class AlertManager:
             return
 
         link, label = self._build_user_link(user_id, username)
-        masked_phone = mask_phone(phone)
+        display_phone = phone if not settings.alerts_mask_phone else mask_phone(phone)
+        created_at_display = _format_lead_timestamp(created_at, settings)
         mention = self._mention_line(settings)
         body_lines = [
             "🆕 Новый лид",
             f"ID: <code>{user_id}</code>",
             f"Профиль: <a href=\"{html.escape(link)}\">{html.escape(label)}</a>",
-            f"Телефон: <code>{html.escape(masked_phone)}</code>",
+            f"Телефон: <code>{html.escape(display_phone)}</code>",
             f"Кампания: <code>{html.escape(campaign or 'default')}</code>",
-            f"Создано: <code>{created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC</code>",
+            f"Создано: <code>{html.escape(created_at_display)}</code>",
             "Ответить в ЛС/созвонить в рабочее время",
         ]
         message = self._compose_message(mention, body_lines)
@@ -436,6 +441,56 @@ async def notify_no_coupons(bot: Bot, *, campaign: str) -> None:
 async def reset_no_coupons(campaign: str) -> None:
     manager = get_alert_manager()
     await manager.reset_no_coupons(campaign)
+
+
+def _format_lead_timestamp(moment: dt.datetime, settings) -> str:
+    timezone = _resolve_timezone(settings.alerts_timezone)
+    time_format = settings.alerts_time_format or DEFAULT_ALERT_TIME_FORMAT
+    aware = moment
+    if aware.tzinfo is None:
+        aware = aware.replace(tzinfo=dt.timezone.utc)
+    else:
+        aware = aware.astimezone(dt.timezone.utc)
+    localized = aware.astimezone(timezone)
+    try:
+        formatted = localized.strftime(time_format)
+    except Exception:
+        logger.warning(
+            "Invalid ALERTS_TIME_FORMAT '%s', falling back to default", time_format
+        )
+        formatted = localized.strftime(DEFAULT_ALERT_TIME_FORMAT)
+    tz_label = _timezone_label(localized)
+    return f"{formatted} {tz_label}".strip()
+
+
+@lru_cache(maxsize=8)
+def _resolve_timezone(name: str | None) -> dt.tzinfo:
+    if not name:
+        return dt.timezone.utc
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        logger.warning("Unknown ALERTS_TZ '%s', falling back to UTC", name)
+        return dt.timezone.utc
+
+
+def _timezone_label(moment: dt.datetime) -> str:
+    label = (moment.tzname() or "").strip()
+    if label and label.upper() != "UTC":
+        return label
+    offset = moment.utcoffset()
+    if not offset:
+        return "UTC"
+    total_seconds = int(offset.total_seconds())
+    if total_seconds == 0:
+        return "UTC"
+    sign = "+" if total_seconds >= 0 else "-"
+    total_seconds = abs(total_seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes = remainder // 60
+    if minutes:
+        return f"UTC{sign}{hours:02d}:{minutes:02d}"
+    return f"UTC{sign}{hours}"
 
 
 async def notify_error(

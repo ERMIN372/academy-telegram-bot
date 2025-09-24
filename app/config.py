@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     alerts_mention: str | None = Field(default=None, alias="ALERTS_MENTION")
     alerts_rate_limit: int = Field(default=30, alias="ALERTS_RATE_LIMIT")
     alerts_bundle_window: int = Field(default=60, alias="ALERTS_BUNDLE_WINDOW")
+    alerts_mask_phone: bool = Field(default=True, alias="ALERTS_MASK_PHONE")
+    alerts_timezone: str = Field(default="Europe/Moscow", alias="ALERTS_TZ")
+    alerts_time_format: str = Field(
+        default="%Y-%m-%d %H:%M:%S", alias="ALERTS_TIME_FORMAT"
+    )
 
     @field_validator("mode")
     @classmethod
@@ -130,6 +135,11 @@ class Settings(BaseSettings):
     @classmethod
     def parse_alerts_enabled(cls, value: Any) -> bool:
         return cls._parse_bool(value)
+
+    @field_validator("alerts_mask_phone", mode="before")
+    @classmethod
+    def parse_alerts_mask_phone(cls, value: Any) -> bool:
+        return cls._parse_bool(value, default=True)
 
     @field_validator(
         "reminder_enabled",
