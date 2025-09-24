@@ -18,7 +18,7 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
         return
 
     data = await state.get_data()
-    campaign = data.get("campaign", "default")
+    campaign = str(data.get("campaign") or "default")
 
     if message.text and message.text.lower() == "отмена":
         await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
@@ -34,31 +34,74 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
         await message.answer("Пожалуйста, отправь номер телефона или нажми Отмена.", reply_markup=kb_send_contact())
         return
 
-    normalized = phone.normalize(contact_phone)
-    if not normalized:
+    normalized_phone = phone.normalize(contact_phone)
+    if not normalized_phone:
         await message.answer("Не удалось распознать номер. Попробуй в формате +7XXXXXXXXXX.")
         return
 
-    await sheets.append(
-        "leads",
-        {
-            "user_id": message.from_user.id,
-            "phone": normalized,
-            "campaign": campaign,
-            "created_at": dt.datetime.utcnow().isoformat(),
-            "status": "new",
-        },
-    )
-    await stats.log_event(message.from_user.id, campaign, "lead", {"phone": normalized})
+    raw_username = message.from_user.username or ""
+    normalized_username = ""
+    if raw_username:
+        normalized_username = f"@{raw_username.lstrip('@').lower()}"
+
+    lead_payload = {
+        "user_id": message.from_user.id,
+        "username": normalized_username,
+        "phone": normalized_phone,
+        "campaign": campaign,
+        "created_at": dt.datetime.utcnow().isoformat(),
+        "status": "new",
+    }
 
     settings = get_settings()
+
+    if settings.leads_upsert:
+        leads = await sheets.read("leads")
+        existing = next(
+            (
+                item
+                for item in leads
+                if str(item.get("user_id")) == str(message.from_user.id)
+                and str(item.get("campaign") or "default") == campaign
+            ),
+            None,
+        )
+        if existing:
+            await sheets.update_row(
+                "leads",
+                existing["row"],
+                {
+                    "phone": normalized_phone,
+                    "username": normalized_username,
+                    "updated_at": dt.datetime.utcnow().isoformat(),
+                },
+            )
+        else:
+            await sheets.append("leads", lead_payload)
+    else:
+        await sheets.append("leads", lead_payload)
+
+    await stats.log_event(
+        message.from_user.id,
+        campaign,
+        "lead",
+        {
+            "user_id": message.from_user.id,
+            "campaign": campaign,
+            "username": normalized_username,
+        },
+    )
     await message.answer("Спасибо! Мы свяжемся с тобой в ближайшее время.", reply_markup=types.ReplyKeyboardRemove())
     if settings.admin_chat_id:
-        username = message.from_user.username
-        user_ref = f"@{username}" if username else str(message.from_user.id)
+        if normalized_username:
+            user_link = f"https://t.me/{normalized_username.lstrip('@')}"
+            user_ref = f"{normalized_username} ({user_link})"
+        else:
+            user_link = f"tg://user?id={message.from_user.id}"
+            user_ref = user_link
         await message.bot.send_message(
             settings.admin_chat_id,
-            f"Новый лид {normalized} по кампании {campaign} от {user_ref}",
+            f"Новый лид {normalized_phone} по кампании {campaign} от {user_ref}",
         )
 
 

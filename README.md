@@ -32,13 +32,14 @@ MVP Telegram-бот для образовательных кампаний. По
 | `GOOGLE_SHEETS_ID` | Идентификатор Google Sheets (часть URL между `/d/` и `/edit`). |
 | `GOOGLE_SERVICE_JSON_B64` | base64-строка от JSON-ключа сервисного аккаунта. |
 | `PORT` | Порт HTTP-сервера FastAPI (актуально в режиме webhook). |
+| `LEADS_UPSERT` | `true/false`. При `true` обновляет лид по паре `(user_id, campaign)` вместо добавления новой строки. |
 
 ### Структура таблицы Google Sheets
 
 | Лист | Поля |
 | --- | --- |
 | `coupons` | `code`, `campaign`, `status`, `reserved_by`, `reserved_at`, `used_at`. Статус свободного купона — `free` или пустой. |
-| `leads` | `user_id`, `phone`, `campaign`, `created_at`, `status`. |
+| `leads` | `user_id`, `username`, `phone`, `campaign`, `created_at`, `status`, `updated_at` (опционально). |
 | `events` | `user_id`, `campaign`, `step`, `ts`, `meta_json`. |
 
 ## Запуск и режимы
@@ -89,7 +90,7 @@ app/
 
 1. `MODE=polling`: `/start webinar_demo` → без подписки ответ `sub_fail`, после подписки `sub_ok`, кнопка «Забрать подарок» выдаёт новый купон, запись появляется в `coupons`/`events`.
 2. Повторное нажатие «Забрать подарок» возвращает тот же код (`gift_repeat`).
-3. Кнопка «Оставить контакт» отправляет клавиатуру `request_contact`. И контакт, и ручной ввод `+7XXXXXXXXXX` нормализуются, сохраняются в `leads`, администратор получает уведомление, в `events` фиксируется шаг `lead`.
+3. Кнопка «Оставить контакт» отправляет клавиатуру `request_contact`. И контакт, и ручной ввод `+7XXXXXXXXXX` нормализуются, username сохраняется в `leads` в формате `@username` (нижний регистр) или пустой строкой. В уведомлении администратору добавляется кликабельная ссылка `https://t.me/<username>` либо fallback `tg://user?id=<user_id>`, в `events` фиксируется шаг `lead` с `meta_json`, содержащим username.
 4. `/lottery <campaign>` — возвращает результат лотереи (`draw`) и затем выдаёт купон (`gift`).
 5. `/fortune <campaign>` — выдаёт предсказание, логирует `fortune`, показывает CTA на подарок.
 6. `MODE=webhook`: при запуске устанавливается webhook (`/tg/webhook` проверяет секрет), `/health` возвращает `{"ok": true}`. После тестов верните `MODE=polling`, чтобы удалить webhook.
