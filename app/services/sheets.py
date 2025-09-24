@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Dict, List, TypeVar
+import logging
+from typing import Any, Callable, Dict, Iterable, List, TypeVar
 
 import gspread
 from google.oauth2.service_account import Credentials
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 _client_lock = asyncio.Lock()
 _client: gspread.Client | None = None
@@ -55,9 +58,48 @@ async def _with_worksheet(sheet: str, worker: Callable[[gspread.Worksheet], T]) 
     return await asyncio.to_thread(_call_worker)
 
 
+def _ensure_headers(ws: gspread.Worksheet, required_headers: Iterable[str]) -> List[str]:
+    headers = ws.row_values(1)
+    ordered_required: List[str] = []
+    seen: set[str] = set()
+    for header in required_headers:
+        if not header:
+            continue
+        if header in seen:
+            continue
+        ordered_required.append(header)
+        seen.add(header)
+
+    if not headers:
+        if ordered_required:
+            end_col = _column_letter(len(ordered_required))
+            ws.update(f"A1:{end_col}1", [ordered_required])
+            logger.warning(
+                "Sheet %s had empty header row, added headers: %s",
+                ws.title,
+                ", ".join(ordered_required),
+            )
+            headers = ordered_required
+        return headers
+
+    missing = [header for header in ordered_required if header not in headers]
+    if missing:
+        new_headers = headers + missing
+        end_col = _column_letter(len(new_headers))
+        ws.update(f"A1:{end_col}1", [new_headers])
+        logger.warning(
+            "Added missing headers %s to sheet %s",
+            ", ".join(missing),
+            ws.title,
+        )
+        headers = new_headers
+
+    return headers
+
+
 async def append(sheet: str, row: Dict[str, Any]) -> None:
     def _append(ws: gspread.Worksheet) -> None:
-        headers = ws.row_values(1)
+        headers = _ensure_headers(ws, row.keys())
         if headers:
             values = [row.get(header, "") for header in headers]
         else:
@@ -82,7 +124,7 @@ async def read(sheet: str) -> List[Dict[str, Any]]:
 
 async def update_row(sheet: str, row: int, data: Dict[str, Any]) -> None:
     def _update(ws: gspread.Worksheet) -> None:
-        headers = ws.row_values(1)
+        headers = _ensure_headers(ws, data.keys())
         if not headers:
             return
         current_values = ws.row_values(row)
