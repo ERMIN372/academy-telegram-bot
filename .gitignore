@@ -1,0 +1,4 @@
+service-account.json
+*.gserviceaccount.com.json
+.env
+.env*
