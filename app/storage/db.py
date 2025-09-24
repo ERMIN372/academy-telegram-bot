@@ -54,6 +54,42 @@ async def init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lottery_sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                campaign TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                variant_index INTEGER,
+                result TEXT,
+                coupon_campaign TEXT
+            )
+            """
+        )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lottery_draws (
+                user_id INTEGER NOT NULL,
+                campaign TEXT NOT NULL,
+                result TEXT NOT NULL,
+                coupon_campaign TEXT,
+                variant_index INTEGER,
+                drawn_at TEXT NOT NULL,
+                session_id TEXT,
+                claimed_at TEXT,
+                PRIMARY KEY(user_id, campaign)
+            )
+            """
+        )
+        await db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lottery_sessions_user_campaign
+            ON lottery_sessions(user_id, campaign)
+            """
+        )
         await db.commit()
 
 
@@ -224,3 +260,150 @@ async def fetch_pending_reminders() -> List[Dict[str, Any]]:
         rows = await cursor.fetchall()
         await cursor.close()
         return [dict(row) for row in rows]
+
+
+async def create_lottery_session(
+    session_id: str,
+    user_id: int,
+    campaign: str,
+    created_at: str,
+    expires_at: str,
+) -> None:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        await db.execute(
+            "DELETE FROM lottery_sessions WHERE user_id=? AND campaign=? AND status=\"active\"",
+            (user_id, campaign),
+        )
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO lottery_sessions(
+                session_id,
+                user_id,
+                campaign,
+                created_at,
+                expires_at,
+                status
+            ) VALUES(?,?,?,?,?,?)
+            """,
+            (session_id, user_id, campaign, created_at, expires_at, "active"),
+        )
+        await db.commit()
+
+
+async def get_lottery_session(session_id: str) -> Optional[Dict[str, Any]]:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT session_id, user_id, campaign, created_at, expires_at, status, variant_index, result, coupon_campaign
+            FROM lottery_sessions
+            WHERE session_id=?
+            """,
+            (session_id,),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        if row is None:
+            return None
+        return dict(row)
+
+
+async def update_lottery_session(
+    session_id: str,
+    *,
+    status: str | None = None,
+    variant_index: int | None = None,
+    result: str | None = None,
+    coupon_campaign: str | None = None,
+) -> None:
+    await init_db()
+    fields: List[str] = []
+    values: List[Any] = []
+    if status is not None:
+        fields.append("status=?")
+        values.append(status)
+    if variant_index is not None:
+        fields.append("variant_index=?")
+        values.append(variant_index)
+    if result is not None:
+        fields.append("result=?")
+        values.append(result)
+    if coupon_campaign is not None:
+        fields.append("coupon_campaign=?")
+        values.append(coupon_campaign)
+    if not fields:
+        return
+    values.append(session_id)
+    async with aiosqlite.connect(_db_file) as db:
+        await db.execute(
+            f"UPDATE lottery_sessions SET {', '.join(fields)} WHERE session_id=?",
+            values,
+        )
+        await db.commit()
+
+
+async def upsert_lottery_draw(
+    user_id: int,
+    campaign: str,
+    result: str,
+    coupon_campaign: str | None,
+    variant_index: int,
+    session_id: str,
+    drawn_at: str,
+) -> None:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        await db.execute(
+            """
+            INSERT INTO lottery_draws(
+                user_id,
+                campaign,
+                result,
+                coupon_campaign,
+                variant_index,
+                drawn_at,
+                session_id,
+                claimed_at
+            ) VALUES(?,?,?,?,?,?,?,NULL)
+            ON CONFLICT(user_id, campaign) DO UPDATE SET
+                result=excluded.result,
+                coupon_campaign=excluded.coupon_campaign,
+                variant_index=excluded.variant_index,
+                drawn_at=excluded.drawn_at,
+                session_id=excluded.session_id,
+                claimed_at=NULL
+            """,
+            (user_id, campaign, result, coupon_campaign or "", variant_index, drawn_at, session_id),
+        )
+        await db.commit()
+
+
+async def get_lottery_draw(user_id: int, campaign: str) -> Optional[Dict[str, Any]]:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT user_id, campaign, result, coupon_campaign, variant_index, drawn_at, session_id, claimed_at
+            FROM lottery_draws
+            WHERE user_id=? AND campaign=?
+            """,
+            (user_id, campaign),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        if row is None:
+            return None
+        return dict(row)
+
+
+async def mark_lottery_claimed(user_id: int, campaign: str, claimed_at: str) -> None:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        await db.execute(
+            "UPDATE lottery_draws SET claimed_at=? WHERE user_id=? AND campaign=?",
+            (claimed_at, user_id, campaign),
+        )
+        await db.commit()

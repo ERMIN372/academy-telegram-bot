@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     reminder_max_per_user: int = Field(default=1, alias="REMINDER_MAX_PER_USER")
     reminder_timezone: str = Field(default="Europe/Moscow", alias="REMINDER_TIMEZONE")
 
+    lottery_enabled: bool = Field(default=False, alias="LOTTERY_ENABLED")
+    lottery_variants: int = Field(default=0, alias="LOTTERY_VARIANTS")
+    lottery_weights: list[float] = Field(default_factory=list, alias="LOTTERY_WEIGHTS")
+    lottery_results: list[str] = Field(default_factory=list, alias="LOTTERY_RESULTS")
+    lottery_coupon_campaign_map: Dict[str, str] = Field(
+        default_factory=dict, alias="LOTTERY_COUPON_CAMPAIGN_MAP"
+    )
+    lottery_cooldown_days: int = Field(default=1, alias="LOTTERY_COOLDOWN_DAYS")
+    lottery_title: str = Field(default="Выбирай окно 🎁", alias="LOTTERY_TITLE")
+    lottery_button_emoji: str = Field(default="🎯", alias="LOTTERY_BUTTON_EMOJI")
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, value: str | None) -> str:
@@ -87,6 +98,11 @@ class Settings(BaseSettings):
     def parse_reminder_flags(cls, value: Any) -> bool:
         return cls._parse_bool(value)
 
+    @field_validator("lottery_enabled", mode="before")
+    @classmethod
+    def parse_lottery_enabled(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
     @field_validator("reminder_delay_hours")
     @classmethod
     def validate_delay(cls, value: int) -> int:
@@ -116,6 +132,81 @@ class Settings(BaseSettings):
         if start > end:
             start, end = end, start
         return (start, end)
+
+    @field_validator("lottery_variants")
+    @classmethod
+    def validate_lottery_variants(cls, value: int) -> int:
+        if value < 0:
+            return 0
+        return value
+
+    @field_validator("lottery_weights", mode="before")
+    @classmethod
+    def parse_lottery_weights(cls, value: Any) -> list[float]:
+        if isinstance(value, (list, tuple)):
+            return [float(x) for x in value if str(x).strip() != ""]
+        if isinstance(value, str):
+            if not value.strip():
+                return []
+            parts = [part.strip() for part in value.split(",") if part.strip()]
+            return [float(part) for part in parts]
+        if value in (None, ""):
+            return []
+        return [float(value)]
+
+    @field_validator("lottery_results", mode="before")
+    @classmethod
+    def parse_lottery_results(cls, value: Any) -> list[str]:
+        if isinstance(value, (list, tuple)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            if not value.strip():
+                return []
+            if value.strip().startswith("["):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except json.JSONDecodeError:
+                    pass
+            parts = [part.strip() for part in value.split(",")]
+            return [part for part in parts if part]
+        return []
+
+    @field_validator("lottery_coupon_campaign_map", mode="before")
+    @classmethod
+    def parse_lottery_campaign_map(cls, value: Any) -> Dict[str, str]:
+        if isinstance(value, dict):
+            return {str(k): str(v) for k, v in value.items() if str(k).strip()}
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return {}
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, dict):
+                    return {
+                        str(k): str(v)
+                        for k, v in parsed.items()
+                        if str(k).strip()
+                    }
+            except json.JSONDecodeError:
+                pairs = [part.strip() for part in value.split(",") if part.strip()]
+                mapping: Dict[str, str] = {}
+                for pair in pairs:
+                    if ":" in pair:
+                        key, val = pair.split(":", 1)
+                        key = key.strip()
+                        val = val.strip()
+                        if key:
+                            mapping[key] = val
+                return mapping
+        return {}
+
+    @field_validator("lottery_cooldown_days")
+    @classmethod
+    def validate_lottery_cooldown(cls, value: int) -> int:
+        return max(0, value)
 
     @cached_property
     def google_service_credentials(self) -> Dict[str, Any]:
