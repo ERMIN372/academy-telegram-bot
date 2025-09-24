@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
 from aiogram import types
 from aiogram.utils import executor
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 import uvicorn
 
 from app.bot import bot, dp
@@ -58,8 +58,15 @@ def run() -> None:
         asyncio.run(setup_webhook())
         uvicorn.run(app, host="0.0.0.0", port=settings.port)
     else:
-        asyncio.run(drop_webhook())
-        executor.start_polling(dp, skip_updates=True)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(drop_webhook())
+        try:
+            executor.start_polling(dp, skip_updates=False, reset_webhook=False, loop=loop)
+        finally:
+            loop.run_until_complete(dp.storage.close())
+            loop.run_until_complete(dp.storage.wait_closed())
+            loop.close()
 
 
 if __name__ == "__main__":
