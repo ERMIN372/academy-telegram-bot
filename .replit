@@ -1,2 +1,6 @@
-[agent]
-expertMode = true
+entrypoint = "app/main.py"
+run = "python -m app.main"
+modules = ["python-3.11"]
+
+[nix]
+packages = ["libxcrypt"]
