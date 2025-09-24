@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import logging
 
 from aiogram import Dispatcher, types
@@ -38,20 +39,27 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
         await message.answer("Не удалось распознать номер. Попробуй в формате +7XXXXXXXXXX.")
         return
 
-    await stats.log_event(message.from_user.id, campaign, "lead_saved", {"phone": normalized})
-    await sheets.append("leads", {
-        "user_id": message.from_user.id,
-        "username": message.from_user.username or "",
-        "phone": normalized,
-        "campaign": campaign,
-    })
+    await sheets.append(
+        "leads",
+        {
+            "user_id": message.from_user.id,
+            "phone": normalized,
+            "campaign": campaign,
+            "created_at": dt.datetime.utcnow().isoformat(),
+            "status": "new",
+        },
+    )
+    await stats.log_event(message.from_user.id, campaign, "lead", {"phone": normalized})
 
     settings = get_settings()
     await message.answer("Спасибо! Мы свяжемся с тобой в ближайшее время.", reply_markup=types.ReplyKeyboardRemove())
     if settings.admin_chat_id:
         username = message.from_user.username
         user_ref = f"@{username}" if username else str(message.from_user.id)
-        await message.bot.send_message(settings.admin_chat_id, f"Новый лид {normalized} от {user_ref}")
+        await message.bot.send_message(
+            settings.admin_chat_id,
+            f"Новый лид {normalized} по кампании {campaign} от {user_ref}",
+        )
 
 
 def register(dp: Dispatcher) -> None:

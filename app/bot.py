@@ -8,7 +8,10 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from app.config import get_settings
 from app.handlers import admin, contacts, fun_interactive, mailing_lottery, start
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 settings = get_settings()
 bot = Bot(token=settings.telegram_bot_token, parse_mode="HTML")
