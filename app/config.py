@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     google_sheets_id: str = Field(alias="GOOGLE_SHEETS_ID")
     google_service_json_b64: str = Field(alias="GOOGLE_SERVICE_JSON_B64")
     port: int = Field(default=8000, alias="PORT")
+    leads_upsert: bool = Field(default=False, alias="LEADS_UPSERT")
 
     @field_validator("mode")
     @classmethod
@@ -48,6 +49,17 @@ class Settings(BaseSettings):
         if value in (None, "", 0, "0"):
             return None
         return int(value)
+
+    @field_validator("leads_upsert", mode="before")
+    @classmethod
+    def normalize_leads_upsert(cls, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value in (None, ""):
+            return False
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
     @cached_property
     def google_service_credentials(self) -> Dict[str, Any]:

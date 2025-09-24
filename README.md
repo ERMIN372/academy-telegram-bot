@@ -7,7 +7,7 @@ MVP Telegram-бот для образовательных кампаний. По
 - `/start <campaign>` — приветствие, проверка подписки на канал, выдача купона и CTA на сбор контакта.
 - `/lottery <campaign>` — взвешенная лотерея со мгновенной выдачей купона.
 - `/fortune <campaign>` — интерактивные «предсказания» с переходом к подарку.
-- Сбор телефона через `request_contact` или ручной ввод с нормализацией +7XXXXXXXXXX.
+- Сбор телефона через `request_contact` или ручной ввод с нормализацией +7XXXXXXXXXX и сохранение Telegram-ника пользователя.
 - Логирование событий в лист `events`, хранение купонов в `coupons`, лидов — в `leads`.
 - Идемпотентность выдачи купонов (один код на пользователя и кампанию).
 - Админ-команды `/ping` (health-check) и `/report` (сводные цифры по таблицам).
@@ -32,14 +32,23 @@ MVP Telegram-бот для образовательных кампаний. По
 | `GOOGLE_SHEETS_ID` | Идентификатор Google Sheets (часть URL между `/d/` и `/edit`). |
 | `GOOGLE_SERVICE_JSON_B64` | base64-строка от JSON-ключа сервисного аккаунта. |
 | `PORT` | Порт HTTP-сервера FastAPI (актуально в режиме webhook). |
+| `LEADS_UPSERT` | `true`/`false`. При `true` обновляет лид по ключу `(user_id, campaign)` вместо добавления новой строки. |
 
 ### Структура таблицы Google Sheets
 
 | Лист | Поля |
 | --- | --- |
 | `coupons` | `code`, `campaign`, `status`, `reserved_by`, `reserved_at`, `used_at`. Статус свободного купона — `free` или пустой. |
-| `leads` | `user_id`, `phone`, `campaign`, `created_at`, `status`. |
+| `leads` | `user_id`, `username`, `phone`, `campaign`, `created_at`, `status`, `updated_at` (при включённом upsert). |
 | `events` | `user_id`, `campaign`, `step`, `ts`, `meta_json`. |
+
+#### Сохранение username
+
+- Username берётся из `from_user.username`, приводится к нижнему регистру и сохраняется в формате `@username`.
+- Если у пользователя нет ника, в таблицу попадает пустая строка и в админ-уведомлении используется ссылка `tg://user?id=<user_id>`.
+- При наличии ника в алёрте для администратора добавляется ссылка вида `https://t.me/username`.
+- В лист `events` для шага `lead` в поле `meta_json` добавляется ключ `username` с тем же значением.
+- При включённом `LEADS_UPSERT=true` повторная отправка контакта обновляет телефон, `username` и `updated_at` в существующей строке по ключу `(user_id, campaign)`.
 
 ## Запуск и режимы
 

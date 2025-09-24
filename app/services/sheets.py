@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Dict, List, TypeVar
+import logging
+from typing import Any, Callable, Dict, List, Sequence, TypeVar
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -10,6 +11,8 @@ from app.config import get_settings
 
 _client_lock = asyncio.Lock()
 _client: gspread.Client | None = None
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -53,6 +56,21 @@ async def _with_worksheet(sheet: str, worker: Callable[[gspread.Worksheet], T]) 
         return worker(worksheet)
 
     return await asyncio.to_thread(_call_worker)
+
+
+async def ensure_columns(sheet: str, columns: Sequence[str]) -> List[str]:
+    def _ensure(ws: gspread.Worksheet) -> List[str]:
+        headers = ws.row_values(1) or []
+        missing = [column for column in columns if column not in headers]
+        if missing:
+            headers.extend(missing)
+            ws.update("1:1", [headers])
+            logger.warning(
+                "Added missing columns %s to sheet '%s'", ", ".join(missing), sheet
+            )
+        return headers
+
+    return await _with_worksheet(sheet, _ensure)
 
 
 async def append(sheet: str, row: Dict[str, Any]) -> None:
