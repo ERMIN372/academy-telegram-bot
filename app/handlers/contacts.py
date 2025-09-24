@@ -8,7 +8,8 @@ from aiogram.dispatcher import FSMContext
 
 from app.config import get_settings
 from app.keyboards.common import kb_send_contact
-from app.services import phone, sheets, stats
+from app.services import phone, reminders, sheets, stats
+from app.storage import db
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,8 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
             "username": normalized_username,
         },
     )
+    await db.upsert_lead(message.from_user.id, campaign)
+    await reminders.cancel_due_to_lead(message.from_user.id, campaign)
     await message.answer("Спасибо! Мы свяжемся с тобой в ближайшее время.", reply_markup=types.ReplyKeyboardRemove())
     if settings.admin_chat_id:
         if normalized_username:
