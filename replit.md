@@ -46,6 +46,9 @@ app/
 - `ALERTS_MENTION`: Optional mention (`@username`) prefixed to alerts
 - `ALERTS_RATE_LIMIT`: Minimum interval between identical alerts (seconds)
 - `ALERTS_BUNDLE_WINDOW`: Error aggregation window (seconds)
+- `ALERTS_MASK_PHONE`: Toggle phone masking in alerts (`true`/`false`, default `true`)
+- `ALERTS_TZ`: Timezone for alert timestamps (IANA/zoneinfo, default `Europe/Moscow`)
+- `ALERTS_TIME_FORMAT`: Datetime format for alerts (`strftime`, default `%Y-%m-%d %H:%M:%S`)
 - `CHANNEL_USERNAME`: Channel for subscription verification
 - `GOOGLE_SHEETS_ID`: Google Sheets table ID
 - `GOOGLE_SERVICE_JSON_B64`: Base64 encoded service account JSON
