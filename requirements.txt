@@ -6,4 +6,5 @@ gspread
 google-auth
 python-dotenv
 aiosqlite
-pydantic
+pydantic==2.6.4
+pydantic-settings==2.1.0

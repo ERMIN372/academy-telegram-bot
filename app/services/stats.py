@@ -13,8 +13,8 @@ async def log_event(user_id: int, campaign: str, step: str, meta: Dict[str, Any]
     data = {
         "ts": dt.datetime.utcnow().isoformat(),
         "user_id": user_id,
-        "campaign": campaign,
+        "campaign": campaign or "default",
         "step": step,
-        "meta": json.dumps(meta, ensure_ascii=False),
+        "meta_json": json.dumps(meta, ensure_ascii=False),
     }
     await sheets.append("events", data)

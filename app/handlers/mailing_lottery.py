@@ -34,7 +34,7 @@ async def cmd_lottery(message: types.Message, state: FSMContext) -> None:
     campaign = parse_start_payload(message.text)
     await state.update_data(campaign=campaign)
     window = _choose_window()
-    await stats.log_event(message.from_user.id, campaign, "lottery_play", {"result": window})
+    await stats.log_event(message.from_user.id, campaign, "draw", {"result": window})
     await message.answer(f"Ты открыл окно: {window}! Забирай подарок.")
     await issue_coupon(message, message.from_user.id, campaign)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from html import escape
 
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
@@ -21,7 +22,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
 
     settings = get_settings()
     text = (
-        "Привет! Чтобы получить подарок, подпишись на канал и нажми проверку."
+        "Привет! Чтобы получить подарок, подпишись на канал и вернись сюда за проверкой."
     )
     await message.answer(
         text,
@@ -50,22 +51,33 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
 
 
 async def _send_coupon(message: types.Message, code: str, campaign: str) -> None:
-    text = f"Твой уникальный купон: <b>{code}</b>\nНе забудь сохранить его!"
-    await message.answer(text, parse_mode="HTML", reply_markup=kb_after_coupon(campaign))
+    text = (
+        f"Твой уникальный купон: <b>{escape(code)}</b>\n\n"
+        "Условия использования:\n"
+        "• Купон не суммируется с другими акциями.\n"
+        "• Не подходит для продления действующей подписки.\n"
+        "• Действует до дедлайна кампании.\n\n"
+        "Оставь контакт, чтобы получить напоминание и инструкции."
+    )
+    await message.answer(text, reply_markup=kb_after_coupon(campaign))
 
 
 async def issue_coupon(message: types.Message, user_id: int, campaign: str) -> None:
+    campaign = campaign or "default"
+
     stored = await db.fetch_user_coupon(user_id, campaign)
     if stored and stored.get("code"):
-        await stats.log_event(user_id, campaign, "gift_repeat")
-        await _send_coupon(message, stored["code"], campaign)
+        code = stored["code"]
+        await stats.log_event(user_id, campaign, "gift_repeat", {"code": code})
+        await _send_coupon(message, code, campaign)
         return
 
-    existing = await coupons.get_user_coupon(user_id, campaign)
-    if existing and existing.get("code"):
-        await db.insert_coupon(user_id, campaign, existing["code"])
-        await stats.log_event(user_id, campaign, "gift_restore")
-        await _send_coupon(message, existing["code"], campaign)
+    sheet_coupon = await coupons.get_user_coupon(user_id, campaign)
+    if sheet_coupon and sheet_coupon.get("code"):
+        code = sheet_coupon["code"]
+        await db.insert_coupon(user_id, campaign, code)
+        await stats.log_event(user_id, campaign, "gift_repeat", {"code": code})
+        await _send_coupon(message, code, campaign)
         return
 
     coupon = await coupons.find_first_free_coupon(campaign)
@@ -74,19 +86,31 @@ async def issue_coupon(message: types.Message, user_id: int, campaign: str) -> N
         await message.answer("Упс! Похоже, подарков временно нет. Мы уже работаем над этим.")
         settings = get_settings()
         if settings.admin_chat_id:
-            await message.bot.send_message(settings.admin_chat_id, f"Нет купонов для кампании {campaign}")
+            await message.bot.send_message(
+                settings.admin_chat_id,
+                f"Нет купонов для кампании {campaign}. Пользователь {user_id}",
+            )
         return
 
-    await coupons.reserve_coupon(coupon["row"], user_id, coupon["code"])
-    await db.insert_coupon(user_id, campaign, coupon["code"])
-    await stats.log_event(user_id, campaign, "gift_issued", {"code": coupon["code"]})
-    await _send_coupon(message, coupon["code"], campaign)
+    reservation = await coupons.reserve_coupon(coupon["row"], user_id, coupon["code"])
+    code = reservation["code"]
+    await db.insert_coupon(user_id, campaign, code)
+    await stats.log_event(user_id, campaign, "gift", {"code": code})
+    await _send_coupon(message, code, campaign)
 
 
 async def callback_get_gift(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     campaign = call.data.split(":", 1)[1] if call.data else "default"
     await state.update_data(campaign=campaign)
+    is_member = await sub_check.is_member(call.bot, call.from_user.id)
+    if not is_member:
+        await stats.log_event(call.from_user.id, campaign, "sub_fail")
+        await call.message.answer(
+            "Подписка не найдена. Подпишись на канал и повтори проверку.",
+            reply_markup=kb_check_sub(campaign),
+        )
+        return
     await issue_coupon(call.message, call.from_user.id, campaign)
 
 
@@ -94,7 +118,7 @@ async def callback_leave_phone(call: types.CallbackQuery, state: FSMContext) -> 
     await call.answer()
     campaign = call.data.split(":", 1)[1] if call.data else "default"
     await state.update_data(campaign=campaign)
-    await stats.log_event(call.from_user.id, campaign, "leave_phone")
+    await stats.log_event(call.from_user.id, campaign, "lead_prompt")
     from app.keyboards.common import kb_send_contact
 
     await call.message.answer("Отправь, пожалуйста, свой номер.", reply_markup=kb_send_contact())

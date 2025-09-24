@@ -10,7 +10,7 @@ def normalize(phone: str) -> str | None:
     if digits.startswith("8"):
         digits = "7" + digits[1:]
     if digits.startswith("7") and len(digits) == 11:
-        return "+" + digits
+        return "+7" + digits[1:]
     if digits.startswith("9") and len(digits) == 10:
         return "+7" + digits
     return None
