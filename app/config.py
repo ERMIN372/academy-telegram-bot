@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     channel_username: str = Field(alias="CHANNEL_USERNAME")
     google_sheets_id: str = Field(alias="GOOGLE_SHEETS_ID")
     google_service_json_b64: str = Field(alias="GOOGLE_SERVICE_JSON_B64")
+    sheets_tz: str = Field(default="Europe/Moscow", alias="SHEETS_TZ")
+    sheets_time_format: str = Field(
+        default="%Y-%m-%d %H:%M:%S", alias="SHEETS_TIME_FORMAT"
+    )
     port: int = Field(default=8000, alias="PORT")
     leads_upsert: bool = Field(default=False, alias="LEADS_UPSERT")
     reminder_enabled: bool = Field(default=False, alias="REMINDER_ENABLED")

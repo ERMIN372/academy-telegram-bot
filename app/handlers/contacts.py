@@ -45,13 +45,15 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
     if raw_username:
         normalized_username = f"@{raw_username.lstrip('@').lower()}"
 
-    created_at = dt.datetime.utcnow()
+    timestamp = sheets.current_timestamp()
+    created_at = timestamp.moment
     lead_payload = {
         "user_id": message.from_user.id,
         "username": normalized_username,
         "phone": normalized_phone,
         "campaign": campaign,
-        "created_at": created_at.isoformat(),
+        "created_at": timestamp.utc_text,
+        "created_at_msk": timestamp.local_text,
         "status": "new",
     }
 
@@ -79,9 +81,19 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
                 },
             )
         else:
-            await sheets.append("leads", lead_payload)
+            await sheets.append(
+                "leads",
+                lead_payload,
+                optional_headers=["created_at_msk"],
+                meta=timestamp.meta,
+            )
     else:
-        await sheets.append("leads", lead_payload)
+        await sheets.append(
+            "leads",
+            lead_payload,
+            optional_headers=["created_at_msk"],
+            meta=timestamp.meta,
+        )
 
     await stats.log_event(
         message.from_user.id,
