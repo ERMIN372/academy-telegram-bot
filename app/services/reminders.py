@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from app.config import get_settings
 from app.keyboards.common import kb_after_coupon
 from app.services import coupons, stats
+from app.utils import safe_text
 from app.storage import db
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,8 @@ class ReminderScheduler:
         self._started = True
         pending = await db.fetch_pending_reminders()
         for item in pending:
-            await self._ensure_task(ReminderKey(item["user_id"], item["campaign"]))
+            campaign_text = safe_text(item.get("campaign")) or "default"
+            await self._ensure_task(ReminderKey(item["user_id"], campaign_text))
         if pending:
             logger.info("Reminder scheduler restored %d pending reminders", len(pending))
         else:
@@ -76,12 +78,13 @@ class ReminderScheduler:
 
     async def schedule(self, user_id: int, campaign: str, code: Optional[str]) -> None:
         settings = get_settings()
-        campaign = campaign or "default"
+        campaign_text = safe_text(campaign) or "default"
+        code_text = safe_text(code)
 
         if settings.reminder_max_per_user == 0:
             await stats.log_event(
                 user_id,
-                campaign,
+                campaign_text,
                 "reminder_skipped",
                 {"reason": "limit_disabled"},
             )
@@ -90,30 +93,30 @@ class ReminderScheduler:
         if not settings.reminder_enabled:
             await stats.log_event(
                 user_id,
-                campaign,
+                campaign_text,
                 "reminder_skipped",
                 {"reason": "disabled"},
             )
             return
 
-        if settings.reminder_only_if_no_lead and await db.has_lead(user_id, campaign):
+        if settings.reminder_only_if_no_lead and await db.has_lead(user_id, campaign_text):
             await stats.log_event(
                 user_id,
-                campaign,
+                campaign_text,
                 "reminder_skipped",
                 {"reason": "lead_exists"},
             )
             return
 
         coupon_info = None
-        if settings.reminder_only_if_not_used or not code:
-            coupon_info = await coupons.get_user_coupon(user_id, campaign)
+        if settings.reminder_only_if_not_used or not code_text:
+            coupon_info = await coupons.get_user_coupon(user_id, campaign_text)
         if coupon_info:
-            code = code or coupon_info.get("code")
-        if not code:
+            code_text = code_text or safe_text(coupon_info.get("code"))
+        if not code_text:
             await stats.log_event(
                 user_id,
-                campaign,
+                campaign_text,
                 "reminder_skipped",
                 {"reason": "no_code"},
             )
@@ -122,34 +125,34 @@ class ReminderScheduler:
         if settings.reminder_only_if_not_used:
             used_at = ""
             if coupon_info is None:
-                coupon_info = await coupons.get_user_coupon(user_id, campaign)
+                coupon_info = await coupons.get_user_coupon(user_id, campaign_text)
             if coupon_info:
-                used_at = str(coupon_info.get("used_at") or "").strip()
+                used_at = safe_text(coupon_info.get("used_at"))
             if used_at:
                 await stats.log_event(
                     user_id,
-                    campaign,
+                    campaign_text,
                     "reminder_skipped",
                     {"reason": "coupon_used", "used_at": used_at},
                 )
                 return
 
-        existing = await db.get_reminder(user_id, campaign)
+        existing = await db.get_reminder(user_id, campaign_text)
         if existing:
             attempts = int(existing.get("attempts") or 0)
             if attempts >= settings.reminder_max_per_user:
                 await stats.log_event(
                     user_id,
-                    campaign,
+                    campaign_text,
                     "reminder_skipped",
                     {"reason": "attempt_limit", "attempts": attempts},
                 )
                 return
-            status = (existing.get("status") or "").strip().lower()
+            status = safe_text(existing.get("status")).lower()
             if status == "scheduled":
                 await stats.log_event(
                     user_id,
-                    campaign,
+                    campaign_text,
                     "reminder_skipped",
                     {"reason": "already_scheduled", "attempts": attempts},
                 )
@@ -157,7 +160,7 @@ class ReminderScheduler:
             if status in {"sent", "cancelled"}:
                 await stats.log_event(
                     user_id,
-                    campaign,
+                    campaign_text,
                     "reminder_skipped",
                     {"reason": f"already_{status}", "attempts": attempts},
                 )
@@ -173,8 +176,8 @@ class ReminderScheduler:
 
         await db.upsert_reminder(
             user_id,
-            campaign,
-            code,
+            campaign_text,
+            code_text,
             scheduled_at.isoformat(),
             attempts,
             status="scheduled",
@@ -182,34 +185,39 @@ class ReminderScheduler:
         )
         await stats.log_event(
             user_id,
-            campaign,
+            campaign_text,
             "reminder_scheduled",
-            {"scheduled_at": scheduled_at.isoformat(), "code": code, "attempt": attempts},
+            {
+                "scheduled_at": scheduled_at.isoformat(),
+                "code": code_text,
+                "attempt": attempts,
+            },
         )
 
         if self._started and self._bot:
-            await self._ensure_task(ReminderKey(user_id, campaign))
+            await self._ensure_task(ReminderKey(user_id, campaign_text))
 
     async def cancel(self, user_id: int, campaign: str, reason: str) -> bool:
-        campaign = campaign or "default"
-        reminder = await db.get_reminder(user_id, campaign)
-        if not reminder or (reminder.get("status") or "").lower() != "scheduled":
+        campaign_text = safe_text(campaign) or "default"
+        reason_text = safe_text(reason)
+        reminder = await db.get_reminder(user_id, campaign_text)
+        if not reminder or safe_text(reminder.get("status")).lower() != "scheduled":
             return False
         cancelled_at = dt.datetime.utcnow().isoformat()
         await db.update_reminder(
             user_id,
-            campaign,
+            campaign_text,
             status="cancelled",
-            reason=reason,
+            reason=reason_text,
             cancelled_at=cancelled_at,
         )
         await stats.log_event(
             user_id,
-            campaign,
+            campaign_text,
             "reminder_cancelled",
-            {"reason": reason, "cancelled_at": cancelled_at},
+            {"reason": reason_text, "cancelled_at": cancelled_at},
         )
-        key = ReminderKey(user_id, campaign)
+        key = ReminderKey(user_id, campaign_text)
         async with self._lock:
             task = self._tasks.pop(key, None)
             if task:
@@ -250,10 +258,10 @@ class ReminderScheduler:
         try:
             while self._started:
                 reminder = await db.get_reminder(key.user_id, key.campaign)
-                if not reminder or (reminder.get("status") or "").lower() != "scheduled":
+                if not reminder or safe_text(reminder.get("status")).lower() != "scheduled":
                     return
 
-                scheduled_at = _parse_datetime(str(reminder.get("scheduled_at")))
+                scheduled_at = _parse_datetime(safe_text(reminder.get("scheduled_at")))
                 now = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
                 if scheduled_at > now:
                     await asyncio.sleep((scheduled_at - now).total_seconds())
@@ -279,12 +287,12 @@ class ReminderScheduler:
                     await self._mark_cancelled(key, "no_coupon")
                     return
 
-                used_at = str(coupon_info.get("used_at") or "").strip()
+                used_at = safe_text(coupon_info.get("used_at"))
                 if settings.reminder_only_if_not_used and used_at:
                     await self._mark_cancelled(key, "coupon_used", {"used_at": used_at})
                     return
 
-                code = str(reminder.get("code") or coupon_info.get("code") or "").strip()
+                code = safe_text(reminder.get("code") or coupon_info.get("code"))
                 if not code:
                     await self._mark_cancelled(key, "no_code")
                     return
@@ -304,9 +312,10 @@ class ReminderScheduler:
             await self._mark_cancelled(key, "error")
 
     async def _send_reminder(self, bot: Bot, key: ReminderKey, code: str) -> None:
+        code_text = safe_text(code)
         payload = {
-            "code": escape(code),
-            "code_plain": code,
+            "code": escape(code_text),
+            "code_plain": code_text,
         }
         settings = get_settings()
         text_template = settings.reminder_text or "Не забудь воспользоваться подарком!"
@@ -352,7 +361,7 @@ class ReminderScheduler:
             key.user_id,
             key.campaign,
             "reminder_sent",
-            {"code": code, "sent_at": sent_at},
+            {"code": code_text, "sent_at": sent_at},
         )
 
     async def _mark_cancelled(
@@ -362,19 +371,20 @@ class ReminderScheduler:
         extra_meta: Optional[Dict[str, str]] = None,
     ) -> None:
         reminder = await db.get_reminder(key.user_id, key.campaign)
-        if not reminder or (reminder.get("status") or "").lower() != "scheduled":
+        if not reminder or safe_text(reminder.get("status")).lower() != "scheduled":
             return
         cancelled_at = dt.datetime.utcnow().isoformat()
+        reason_text = safe_text(reason)
         await db.update_reminder(
             key.user_id,
             key.campaign,
             status="cancelled",
-            reason=reason,
+            reason=reason_text,
             cancelled_at=cancelled_at,
         )
-        meta = {"reason": reason, "cancelled_at": cancelled_at}
+        meta: Dict[str, str] = {"reason": reason_text, "cancelled_at": cancelled_at}
         if extra_meta:
-            meta.update(extra_meta)
+            meta.update({k: safe_text(v) for k, v in extra_meta.items()})
         await stats.log_event(key.user_id, key.campaign, "reminder_cancelled", meta)
 
 
