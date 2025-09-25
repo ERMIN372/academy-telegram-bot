@@ -12,6 +12,7 @@ from app.services import alerts, coupons, reminders, stats, sub_check
 from app.services import lottery as lottery_service
 from app.services.deep_link import parse_start_payload
 from app.storage import db
+from app.utils import safe_text
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,10 @@ def _meta(user_id: int, campaign: str, username: str | None, extra: dict | None 
     if extra:
         payload.update(extra)
     payload.setdefault("user_id", user_id)
-    payload.setdefault("campaign", campaign or "default")
-    if username:
-        payload.setdefault("username", username)
+    payload.setdefault("campaign", safe_text(campaign) or "default")
+    username_text = safe_text(username)
+    if username_text:
+        payload.setdefault("username", username_text)
     return payload
 
 
@@ -33,7 +35,7 @@ def _after_sub_keyboard(
     include_lottery: bool,
     lottery_label: str,
 ) -> types.InlineKeyboardMarkup:
-    campaign_value = campaign or "default"
+    campaign_value = safe_text(campaign) or "default"
     markup = types.InlineKeyboardMarkup(row_width=1)
     if include_lottery:
         markup.add(
@@ -56,18 +58,21 @@ def _after_sub_keyboard(
 
 
 async def cmd_start(message: types.Message, state: FSMContext) -> None:
-    payload = parse_start_payload(message.text)
+    payload = safe_text(parse_start_payload(message.text))
     config = lottery_service.get_config()
-    username = message.from_user.username if message.from_user else None
+    raw_username = message.from_user.username if message.from_user else None
+    username = safe_text(raw_username) or None
     campaign = payload
     is_draw_payload = False
     if payload.startswith(config.draw_prefix):
-        suffix = payload[len(config.draw_prefix) :].strip()
+        suffix = safe_text(payload[len(config.draw_prefix) :])
         if suffix:
             campaign = suffix
             is_draw_payload = True
         else:
             campaign = "default"
+
+    campaign = safe_text(campaign) or "default"
 
     await state.update_data(campaign=campaign)
 
@@ -162,10 +167,14 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
 
 async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
-    campaign = call.data.split(":", 1)[1] if call.data else "default"
-    await state.update_data(campaign=campaign)
+    campaign_value = "default"
+    if call.data:
+        campaign_value = safe_text(call.data.split(":", 1)[1] if ":" in call.data else call.data)
+    campaign_value = campaign_value or "default"
+    await state.update_data(campaign=campaign_value)
     is_member = await sub_check.is_member(call.bot, call.from_user.id)
-    username = call.from_user.username if call.from_user else None
+    raw_username = call.from_user.username if call.from_user else None
+    username = safe_text(raw_username) or None
     if is_member:
         config = lottery_service.get_config()
         include_lottery = bool(config.enabled and config.results)
@@ -179,11 +188,11 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
             if bucket is not None:
                 await stats.log_event(
                     call.from_user.id,
-                    campaign,
+                    campaign_value,
                     "draw_bucket",
                     _meta(
                         call.from_user.id,
-                        campaign,
+                        campaign_value,
                         username,
                         {"bucket": bucket, "show_lottery_button": show_lottery_button},
                     ),
@@ -194,18 +203,18 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
 
         await stats.log_event(
             call.from_user.id,
-            campaign,
+            campaign_value,
             "sub_ok",
             _meta(
                 call.from_user.id,
-                campaign,
+                campaign_value,
                 username,
                 {"source": "button", **bucket_meta},
             ),
             username=username,
         )
         keyboard = _after_sub_keyboard(
-            campaign,
+            campaign_value,
             include_lottery=show_lottery_button,
             lottery_label=config.button_label,
         )
@@ -217,7 +226,7 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
         autostart = data.get("lottery_autostart") if isinstance(data, dict) else None
         if (
             autostart
-            and autostart.get("campaign") == campaign
+            and autostart.get("campaign") == campaign_value
             and include_lottery
         ):
             from app.handlers import lottery as lottery_handlers
@@ -225,7 +234,7 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
             await lottery_handlers.present_lottery(
                 call.message,
                 call.from_user.id,
-                campaign,
+                campaign_value,
                 source=autostart.get("source", "deeplink"),
                 trigger="deeplink_post_check",
                 username=username,
@@ -234,11 +243,11 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
     else:
         await stats.log_event(
             call.from_user.id,
-            campaign,
+            campaign_value,
             "sub_fail",
             _meta(
                 call.from_user.id,
-                campaign,
+                campaign_value,
                 username,
                 {"source": "button"},
             ),
@@ -248,8 +257,9 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
 
 
 async def _send_coupon(message: types.Message, code: str, campaign: str) -> None:
+    code_text = safe_text(code)
     text = (
-        f"Твой уникальный купон: <b>{escape(code)}</b>\n\n"
+        f"Твой уникальный купон: <b>{escape(code_text)}</b>\n\n"
         "Условия использования:\n"
         "• Купон не суммируется с другими акциями.\n"
         "• Не подходит для продления действующей подписки.\n"
@@ -267,13 +277,16 @@ async def issue_coupon(
     stats_campaign: str | None = None,
     no_coupons_message: str | None = None,
 ) -> bool:
-    coupon_campaign = campaign or "default"
-    stats_campaign = stats_campaign or coupon_campaign
-    username = message.from_user.username if message.from_user else None
+    campaign_text = safe_text(campaign)
+    coupon_campaign = campaign_text or "default"
+    stats_campaign_text = safe_text(stats_campaign) if stats_campaign is not None else ""
+    stats_campaign = stats_campaign_text or coupon_campaign
+    raw_username = message.from_user.username if message.from_user else None
+    username = safe_text(raw_username) or None
 
     stored = await db.fetch_user_coupon(user_id, coupon_campaign)
     if stored and stored.get("code"):
-        code = stored["code"]
+        code = safe_text(stored["code"])
         await stats.log_event(
             user_id,
             stats_campaign,
@@ -293,7 +306,7 @@ async def issue_coupon(
 
     sheet_coupon = await coupons.get_user_coupon(user_id, coupon_campaign)
     if sheet_coupon and sheet_coupon.get("code"):
-        code = sheet_coupon["code"]
+        code = safe_text(sheet_coupon["code"])
         await db.insert_coupon(user_id, coupon_campaign, code)
         await stats.log_event(
             user_id,
@@ -334,7 +347,7 @@ async def issue_coupon(
         return False
 
     reservation = await coupons.reserve_coupon(coupon["row"], user_id, coupon["code"])
-    code = reservation["code"]
+    code = safe_text(reservation["code"])
     await db.insert_coupon(user_id, coupon_campaign, code)
     await stats.log_event(
         user_id,
@@ -356,24 +369,29 @@ async def issue_coupon(
 
 async def callback_get_gift(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
-    campaign = call.data.split(":", 1)[1] if call.data else "default"
-    await state.update_data(campaign=campaign)
-    await _start_lottery_flow(call, campaign, trigger="gift_button")
+    campaign_value = "default"
+    if call.data:
+        campaign_value = safe_text(call.data.split(":", 1)[1] if ":" in call.data else call.data)
+    campaign_value = campaign_value or "default"
+    await state.update_data(campaign=campaign_value)
+    await _start_lottery_flow(call, campaign_value, trigger="gift_button")
 
 
 async def _start_lottery_flow(
     call: types.CallbackQuery, campaign: str, *, trigger: str
 ) -> None:
-    username = call.from_user.username if call.from_user else None
+    raw_username = call.from_user.username if call.from_user else None
+    username = safe_text(raw_username) or None
+    campaign_text = safe_text(campaign) or "default"
     is_member = await sub_check.is_member(call.bot, call.from_user.id)
     if not is_member:
         await stats.log_event(
             call.from_user.id,
-            campaign,
+            campaign_text,
             "sub_fail",
             _meta(
                 call.from_user.id,
-                campaign,
+                campaign_text,
                 username,
                 {"source": "button", "trigger": trigger},
             ),
@@ -381,7 +399,7 @@ async def _start_lottery_flow(
         )
         await call.message.answer(
             "Подписка не найдена. Подпишись на канал и повтори проверку.",
-            reply_markup=kb_check_sub(campaign),
+            reply_markup=kb_check_sub(campaign_text),
         )
         return
 
@@ -390,7 +408,7 @@ async def _start_lottery_flow(
     await lottery_handlers.present_lottery(
         call.message,
         call.from_user.id,
-        campaign,
+        campaign_text,
         source="button",
         trigger=trigger,
         username=username,
@@ -399,21 +417,28 @@ async def _start_lottery_flow(
 
 async def callback_start_lottery(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
-    campaign = call.data.split(":", 1)[1] if call.data else "default"
-    await state.update_data(campaign=campaign)
-    await _start_lottery_flow(call, campaign, trigger="lottery_button")
+    campaign_value = "default"
+    if call.data:
+        campaign_value = safe_text(call.data.split(":", 1)[1] if ":" in call.data else call.data)
+    campaign_value = campaign_value or "default"
+    await state.update_data(campaign=campaign_value)
+    await _start_lottery_flow(call, campaign_value, trigger="lottery_button")
 
 
 async def callback_leave_phone(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
-    campaign = call.data.split(":", 1)[1] if call.data else "default"
-    await state.update_data(campaign=campaign)
-    username = call.from_user.username if call.from_user else None
+    campaign_value = "default"
+    if call.data:
+        campaign_value = safe_text(call.data.split(":", 1)[1] if ":" in call.data else call.data)
+    campaign_value = campaign_value or "default"
+    await state.update_data(campaign=campaign_value)
+    raw_username = call.from_user.username if call.from_user else None
+    username = safe_text(raw_username) or None
     await stats.log_event(
         call.from_user.id,
-        campaign,
+        campaign_value,
         "lead_prompt",
-        _meta(call.from_user.id, campaign, username),
+        _meta(call.from_user.id, campaign_value, username),
         username=username,
     )
     from app.keyboards.common import kb_send_contact

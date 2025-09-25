@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 from html import escape
-from typing import Iterable
+from typing import Any, Iterable
 
 
-def bold(text: str) -> str:
-    return f"<b>{escape(text)}</b>"
+def safe_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
-def italic(text: str) -> str:
-    return f"<i>{escape(text)}</i>"
+def bold(text: Any) -> str:
+    value = safe_text(text)
+    return f"<b>{escape(value)}</b>"
 
 
-def format_list(items: Iterable[str]) -> str:
-    return "\n".join(f"• {escape(item)}" for item in items)
+def italic(text: Any) -> str:
+    value = safe_text(text)
+    return f"<i>{escape(value)}</i>"
+
+
+def format_list(items: Iterable[Any]) -> str:
+    return "\n".join(f"• {escape(safe_text(item))}" for item in items)

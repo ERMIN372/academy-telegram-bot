@@ -17,6 +17,7 @@ from aiogram.utils.exceptions import TelegramAPIError
 
 from app.config import get_settings
 from app.services import stats
+from app.utils import safe_text
 
 logger = logging.getLogger(__name__)
 
@@ -55,45 +56,55 @@ class AlertManager:
         created_at: dt.datetime,
     ) -> None:
         settings = get_settings()
+        campaign_text = safe_text(campaign) or "default"
+        user_id_text = safe_text(user_id)
+        username_text = safe_text(username)
+        phone_text = safe_text(phone)
         if not self._alerts_enabled(settings):
             await self._log_skip(
                 user_id=user_id,
-                campaign=campaign,
+                campaign=campaign_text,
                 reason="disabled",
                 alert_type="new_lead",
             )
             return
 
-        key = f"lead:{campaign}:{user_id}"
+        key = f"lead:{campaign_text}:{user_id_text}"
         if self._is_rate_limited(key, settings):
             await self._log_skip(
                 user_id=user_id,
-                campaign=campaign,
+                campaign=campaign_text,
                 reason="rate_limited",
                 alert_type="new_lead",
             )
             return
 
-        link, label = self._build_user_link(user_id, username)
-        display_phone = phone if not settings.alerts_mask_phone else mask_phone(phone)
+        link, label = self._build_user_link(user_id, username_text)
+        display_phone = (
+            phone_text if not settings.alerts_mask_phone else mask_phone(phone_text)
+        )
         created_at_display = _format_lead_timestamp(created_at, settings)
         mention = self._mention_line(settings)
+        user_display = html.escape(user_id_text or "—")
+        display_phone_escaped = html.escape(display_phone)
+        campaign_display = html.escape(campaign_text)
+        created_at_display = safe_text(created_at_display)
         body_lines = [
             "🆕 Новый лид",
-            f"ID: <code>{user_id}</code>",
+            f"ID: <code>{user_display}</code>",
             f"Профиль: <a href=\"{html.escape(link)}\">{html.escape(label)}</a>",
-            f"Телефон: <code>{html.escape(display_phone)}</code>",
-            f"Кампания: <code>{html.escape(campaign or 'default')}</code>",
+            f"Телефон: <code>{display_phone_escaped}</code>",
+            f"Кампания: <code>{campaign_display or 'default'}</code>",
             f"Создано: <code>{html.escape(created_at_display)}</code>",
             "Ответить в ЛС/созвонить в рабочее время",
         ]
         message = self._compose_message(mention, body_lines)
         meta = {
             "type": "new_lead",
-            "campaign": campaign,
+            "campaign": campaign_text,
         }
 
-        delivered = await self._deliver(bot, message, key, user_id, campaign, meta)
+        delivered = await self._deliver(bot, message, key, user_id, campaign_text, meta)
         if delivered:
             self._last_sent[key] = dt.datetime.utcnow()
 
@@ -104,35 +115,36 @@ class AlertManager:
         campaign: str,
     ) -> None:
         settings = get_settings()
+        campaign_text = safe_text(campaign) or "default"
         if not self._alerts_enabled(settings):
             await self._log_skip(
                 user_id=0,
-                campaign=campaign,
+                campaign=campaign_text,
                 reason="disabled",
                 alert_type="no_coupons",
             )
             return
 
         async with self._lock:
-            attempts = self._no_coupon_attempts.get(campaign, 0) + 1
-            self._no_coupon_attempts[campaign] = attempts
-            already_reported = self._no_coupon_reported.get(campaign, False)
+            attempts = self._no_coupon_attempts.get(campaign_text, 0) + 1
+            self._no_coupon_attempts[campaign_text] = attempts
+            already_reported = self._no_coupon_reported.get(campaign_text, False)
 
         if already_reported:
             await self._log_skip(
                 user_id=0,
-                campaign=campaign,
+                campaign=campaign_text,
                 reason="already_reported",
                 alert_type="no_coupons",
                 extra={"attempts": attempts},
             )
             return
 
-        key = f"no_coupons:{campaign}"
+        key = f"no_coupons:{campaign_text}"
         if self._is_rate_limited(key, settings):
             await self._log_skip(
                 user_id=0,
-                campaign=campaign,
+                campaign=campaign_text,
                 reason="rate_limited",
                 alert_type="no_coupons",
                 extra={"attempts": attempts},
@@ -143,7 +155,7 @@ class AlertManager:
         now = dt.datetime.utcnow()
         body_lines = [
             "⚠️ Коды закончились",
-            f"Кампания: <code>{html.escape(campaign or 'default')}</code>",
+            f"Кампания: <code>{html.escape(campaign_text)}</code>",
             f"Попыток: <b>{attempts}</b>",
             f"Зафиксировано: <code>{now.strftime('%Y-%m-%d %H:%M:%S')} UTC</code>",
             "Пожалуйста, пополните лист coupons",
@@ -151,20 +163,21 @@ class AlertManager:
         message = self._compose_message(mention, body_lines)
         meta = {
             "type": "no_coupons",
-            "campaign": campaign,
+            "campaign": campaign_text,
             "attempts": attempts,
         }
 
-        delivered = await self._deliver(bot, message, key, 0, campaign, meta)
+        delivered = await self._deliver(bot, message, key, 0, campaign_text, meta)
         if delivered:
             async with self._lock:
-                self._no_coupon_reported[campaign] = True
+                self._no_coupon_reported[campaign_text] = True
             self._last_sent[key] = dt.datetime.utcnow()
 
     async def reset_no_coupons(self, campaign: str) -> None:
+        campaign_text = safe_text(campaign) or "default"
         async with self._lock:
-            self._no_coupon_reported.pop(campaign, None)
-            self._no_coupon_attempts.pop(campaign, None)
+            self._no_coupon_reported.pop(campaign_text, None)
+            self._no_coupon_attempts.pop(campaign_text, None)
 
     async def notify_error(self, bot: Bot, payload: ErrorAlert) -> None:
         settings = get_settings()
@@ -327,24 +340,27 @@ class AlertManager:
         await stats.log_event(user_id or 0, campaign or "system", "alert_skipped", meta)
 
     def _mention_line(self, settings) -> str | None:
-        mention = settings.alerts_mention
+        mention = safe_text(settings.alerts_mention)
         if mention:
-            mention = mention.strip()
-            if mention:
-                return mention
+            return mention
         return None
 
     def _compose_message(self, mention: str | None, lines: Iterable[str]) -> str:
         body = "\n".join(lines)
-        if mention:
-            return f"{mention}\n{body}"
+        mention_text = safe_text(mention)
+        if mention_text:
+            return f"{mention_text}\n{body}"
         return body
 
-    def _build_user_link(self, user_id: int, username: str | None) -> tuple[str, str]:
-        if username:
-            normalized = username.lstrip("@").strip()
+    def _build_user_link(
+        self, user_id: int | str, username: str | None
+    ) -> tuple[str, str]:
+        username_text = safe_text(username)
+        if username_text:
+            normalized = safe_text(username_text.lstrip("@"))
             return (f"https://t.me/{normalized}", f"@{normalized}")
-        return (f"tg://user?id={user_id}", str(user_id))
+        user_id_text = safe_text(user_id) or "0"
+        return (f"tg://user?id={user_id_text}", user_id_text)
 
     def _alerts_enabled(self, settings) -> bool:
         return bool(settings.alerts_enabled)
@@ -372,8 +388,9 @@ class AlertManager:
         return max(0.0, remaining)
 
     def _error_key(self, payload: ErrorAlert) -> str:
-        description = payload.description or ""
-        return f"error:{payload.step}:{description}".strip()
+        step = safe_text(payload.step) or "unknown"
+        description = safe_text(payload.description)
+        return f"error:{step}:{description}".strip()
 
     def _format_error_alert(self, entries: List[ErrorAlert]) -> str:
         settings = get_settings()
@@ -382,18 +399,22 @@ class AlertManager:
         title = "🧯 Ошибка в боте"
         if count > 1:
             title += f" (×{count})"
-        header = [title, f"Шаг: <code>{html.escape(entries[0].step or 'unknown')}</code>"]
-        header.append(f"Описание: <code>{html.escape(entries[0].description or 'не указано')}</code>")
+        step = safe_text(entries[0].step) or "unknown"
+        description = safe_text(entries[0].description) or "не указано"
+        header = [title, f"Шаг: <code>{html.escape(step)}</code>"]
+        header.append(f"Описание: <code>{html.escape(description)}</code>")
         detail_lines = []
         for item in entries:
-            username = item.username or "—"
-            last_action = item.last_action or "—"
+            username = safe_text(item.username) or "—"
+            last_action = safe_text(item.last_action) or "—"
+            trace_id = safe_text(item.trace_id) or "—"
+            user_display = safe_text(item.user_id) or "—"
             detail_lines.append(
                 " • "
                 + (
-                    f"Trace <code>{html.escape(item.trace_id)}</code> — "
+                    f"Trace <code>{html.escape(trace_id)}</code> — "
                     f"{item.when.strftime('%Y-%m-%d %H:%M:%S')} UTC"
-                    f", user <code>{item.user_id or '—'}</code>, "
+                    f", user <code>{html.escape(user_display)}</code>, "
                     f"username <code>{html.escape(username)}</code>"
                     f", last_action <code>{html.escape(last_action)}</code>"
                 )
@@ -475,7 +496,7 @@ def _resolve_timezone(name: str | None) -> dt.tzinfo:
 
 
 def _timezone_label(moment: dt.datetime) -> str:
-    label = (moment.tzname() or "").strip()
+    label = safe_text(moment.tzname())
     if label and label.upper() != "UTC":
         return label
     offset = moment.utcoffset()
@@ -562,13 +583,14 @@ def setup_error_handler(dp: Dispatcher) -> None:
         return True
 
 
-def mask_phone(phone: str) -> str:
-    digits = [ch for ch in phone if ch.isdigit()]
+def mask_phone(phone: str | int | None) -> str:
+    phone_text = safe_text(phone)
+    digits = [ch for ch in phone_text if ch.isdigit()]
     if len(digits) < 4:
         return "***"
     last_four = "".join(digits[-4:])
-    if phone.startswith("+"):
-        prefix = phone[:2]
+    if phone_text.startswith("+"):
+        prefix = phone_text[:2]
     else:
         prefix = "+" + digits[0] if digits else "+"
     return f"{prefix}•••****{last_four}"
