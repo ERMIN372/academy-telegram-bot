@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime as dt
 import json
 from typing import Any, Dict
 
@@ -22,11 +21,15 @@ async def log_event(
     meta_payload.setdefault("campaign", campaign or "default")
     if username:
         meta_payload.setdefault("username", username)
+    timestamp = sheets.current_timestamp()
     data = {
-        "ts": dt.datetime.utcnow().isoformat(),
+        "ts": timestamp.utc_text,
+        "ts_msk": timestamp.local_text,
         "user_id": user_id,
         "campaign": campaign or "default",
         "step": step,
         "meta_json": json.dumps(meta_payload, ensure_ascii=False),
     }
-    await sheets.append("events", data)
+    await sheets.append(
+        "events", data, optional_headers=["ts_msk"], meta=timestamp.meta
+    )

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime as dt
 from typing import Dict, Optional
 
 from app.services import sheets
@@ -28,13 +27,21 @@ async def find_first_free_coupon(campaign: str | None) -> Optional[Dict[str, str
 
 async def reserve_coupon(row: int, user_id: int, code: str) -> Dict[str, str]:
     sanitized_code = safe_text(code)
+    timestamp = sheets.current_timestamp()
     data = {
         "code": sanitized_code,
         "status": "reserved",
         "reserved_by": safe_text(user_id),
-        "reserved_at": dt.datetime.utcnow().isoformat(),
+        "reserved_at": timestamp.utc_text,
+        "reserved_at_msk": timestamp.local_text,
     }
-    await sheets.update_row(COUPONS_SHEET, row, data)
+    await sheets.update_row(
+        COUPONS_SHEET,
+        row,
+        data,
+        optional_headers=["reserved_at_msk"],
+        meta=timestamp.meta,
+    )
     return {"code": sanitized_code, "row": row}
 
 

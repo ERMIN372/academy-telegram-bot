@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import logging
+from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Callable, Dict, Iterable, List, TypeVar
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -14,7 +18,20 @@ logger = logging.getLogger(__name__)
 _client_lock = asyncio.Lock()
 _client: gspread.Client | None = None
 
+DEFAULT_SHEETS_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class SheetTimestamp:
+    moment: dt.datetime
+    utc_text: str
+    local_text: str
+
+    @property
+    def meta(self) -> Dict[str, str]:
+        return {"utc": self.utc_text, "msk": self.local_text}
 
 
 def _column_letter(index: int) -> str:
@@ -58,6 +75,34 @@ async def _with_worksheet(sheet: str, worker: Callable[[gspread.Worksheet], T]) 
     return await asyncio.to_thread(_call_worker)
 
 
+@lru_cache(maxsize=4)
+def _resolve_sheet_timezone(name: str | None) -> dt.tzinfo:
+    if not name:
+        return dt.timezone.utc
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        logger.warning("Unknown SHEETS_TZ '%s', falling back to UTC", name)
+        return dt.timezone.utc
+
+
+def current_timestamp() -> SheetTimestamp:
+    settings = get_settings()
+    aware_utc = dt.datetime.now(dt.timezone.utc)
+    utc_text = aware_utc.isoformat().replace("+00:00", "Z")
+    timezone = _resolve_sheet_timezone(settings.sheets_tz)
+    localized = aware_utc.astimezone(timezone)
+    time_format = settings.sheets_time_format or DEFAULT_SHEETS_TIME_FORMAT
+    try:
+        local_text = localized.strftime(time_format)
+    except Exception:
+        logger.warning(
+            "Invalid SHEETS_TIME_FORMAT '%s', falling back to default", time_format
+        )
+        local_text = localized.strftime(DEFAULT_SHEETS_TIME_FORMAT)
+    return SheetTimestamp(moment=aware_utc, utc_text=utc_text, local_text=local_text)
+
+
 def _ensure_headers(ws: gspread.Worksheet, required_headers: Iterable[str]) -> List[str]:
     headers = ws.row_values(1)
     ordered_required: List[str] = []
@@ -97,9 +142,28 @@ def _ensure_headers(ws: gspread.Worksheet, required_headers: Iterable[str]) -> L
     return headers
 
 
-async def append(sheet: str, row: Dict[str, Any]) -> None:
+async def append(
+    sheet: str,
+    row: Dict[str, Any],
+    *,
+    optional_headers: Iterable[str] | None = None,
+    meta: Dict[str, Any] | None = None,
+) -> None:
+    optional_set = {header for header in (optional_headers or []) if header}
+
     def _append(ws: gspread.Worksheet) -> None:
-        headers = _ensure_headers(ws, row.keys())
+        headers = _ensure_headers(
+            ws, [key for key in row.keys() if key not in optional_set]
+        )
+        missing_optional = [header for header in optional_set if header not in headers]
+        if missing_optional:
+            logger.warning(
+                "Sheet %s is missing optional columns: %s",
+                ws.title,
+                ", ".join(missing_optional),
+            )
+        if meta:
+            logger.info("Appending to %s with timestamp meta: %s", ws.title, meta)
         if headers:
             values = [row.get(header, "") for header in headers]
         else:
@@ -122,11 +186,33 @@ async def read(sheet: str) -> List[Dict[str, Any]]:
     return await _with_worksheet(sheet, _read)
 
 
-async def update_row(sheet: str, row: int, data: Dict[str, Any]) -> None:
+async def update_row(
+    sheet: str,
+    row: int,
+    data: Dict[str, Any],
+    *,
+    optional_headers: Iterable[str] | None = None,
+    meta: Dict[str, Any] | None = None,
+) -> None:
+    optional_set = {header for header in (optional_headers or []) if header}
+
     def _update(ws: gspread.Worksheet) -> None:
-        headers = _ensure_headers(ws, data.keys())
+        headers = _ensure_headers(
+            ws, [key for key in data.keys() if key not in optional_set]
+        )
         if not headers:
             return
+        missing_optional = [header for header in optional_set if header not in headers]
+        if missing_optional:
+            logger.warning(
+                "Sheet %s is missing optional columns: %s",
+                ws.title,
+                ", ".join(missing_optional),
+            )
+        if meta:
+            logger.info(
+                "Updating %s row %d with timestamp meta: %s", ws.title, row, meta
+            )
         current_values = ws.row_values(row)
         merged = {header: "" for header in headers}
         for header, value in zip(headers, current_values):

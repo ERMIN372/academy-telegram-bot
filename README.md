@@ -31,6 +31,8 @@ MVP Telegram-бот для образовательных кампаний. По
 | `CHANNEL_USERNAME` | Username канала (с `@`), на который проверяется подписка. |
 | `GOOGLE_SHEETS_ID` | Идентификатор Google Sheets (часть URL между `/d/` и `/edit`). |
 | `GOOGLE_SERVICE_JSON_B64` | base64-строка от JSON-ключа сервисного аккаунта. |
+| `SHEETS_TZ` | Таймзона (IANA) для локализованного времени в Google Sheets. По умолчанию `Europe/Moscow`. |
+| `SHEETS_TIME_FORMAT` | Формат отображения локального времени (`strftime`). По умолчанию `%Y-%m-%d %H:%M:%S`. |
 | `PORT` | Порт HTTP-сервера FastAPI (актуально в режиме webhook). |
 | `LEADS_UPSERT` | `true/false`. При `true` обновляет лид по паре `(user_id, campaign)` вместо добавления новой строки. |
 | `ALERTS_ENABLED` | `true/false`. Глобальный флаг отправки алёртов. |
@@ -51,9 +53,9 @@ MVP Telegram-бот для образовательных кампаний. По
 
 | Лист | Поля |
 | --- | --- |
-| `coupons` | `code`, `campaign`, `status`, `reserved_by`, `reserved_at`, `used_at`. Статус свободного купона — `free` или пустой. |
-| `leads` | `user_id`, `username`, `phone`, `campaign`, `created_at`, `status`, `updated_at` (опционально). |
-| `events` | `user_id`, `campaign`, `step`, `ts`, `meta_json`. |
+| `coupons` | `code`, `campaign`, `status`, `reserved_by`, `reserved_at`, `reserved_at_msk` (опц.), `used_at`, `used_at_msk` (опц.). Статус свободного купона — `free` или пустой. |
+| `leads` | `user_id`, `username`, `phone`, `campaign`, `created_at`, `created_at_msk` (опц.), `status`, `updated_at` (опционально). |
+| `events` | `user_id`, `campaign`, `step`, `ts`, `ts_msk` (опц.), `meta_json`. |
 
 ## Запуск и режимы
 
@@ -108,6 +110,7 @@ app/
 5. `/fortune <campaign>` — выдаёт предсказание, логирует `fortune`, показывает CTA на подарок.
 6. `MODE=webhook`: при запуске устанавливается webhook (`/tg/webhook` проверяет секрет), `/health` возвращает `{"ok": true}`. После тестов верните `MODE=polling`, чтобы удалить webhook.
 7. При исчерпании купонов пользователь видит корректное сообщение, а в `events` фиксируется `no_coupons` и админу отправляется алёрт.
+8. Создайте тестовую запись в таблице (лид, событие или резерв купона) и убедитесь, что рядом с UTC-полем появилась колонка `*_msk` с временем в формате `%Y-%m-%d %H:%M:%S`.
 
 ## Troubleshooting
 
