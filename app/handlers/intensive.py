@@ -170,7 +170,7 @@ async def cmd_intensive(message: types.Message, state: FSMContext) -> None:
         "Привет! Это производственный интенсив Академии Нефтьмагистраль и Караваевы. "
         "Подписывайтесь на канал, а я подскажу детали и помогу записаться."
     )
-    welcome_photo = MEDIA_DIR / "16.webp"
+    welcome_photo = MEDIA_DIR / "15.jpg"
     if welcome_photo.exists():
         await message.answer_photo(
             types.InputFile(str(welcome_photo)),
