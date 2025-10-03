@@ -7,7 +7,12 @@ from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 
 from app.config import get_settings
-from app.keyboards.common import kb_after_coupon, kb_check_sub, kb_subscribe
+from app.keyboards.common import (
+    kb_after_coupon,
+    kb_check_sub,
+    kb_main_menu,
+    kb_subscribe,
+)
 from app.services import alerts, coupons, reminders, stats, sub_check
 from app.services import lottery as lottery_service
 from app.services.deep_link import parse_start_payload
@@ -49,18 +54,32 @@ def _after_sub_keyboard(
             text="🎁 Забрать подарок", callback_data=f"get_gift:{campaign_value}"
         )
     )
-    markup.add(
-        types.InlineKeyboardButton(
-            text="📞 Оставить контакт", callback_data=f"leave_phone:{campaign_value}"
-        )
-    )
-    markup.add(
-        types.InlineKeyboardButton(
-            text="🥐 Производственный интенсив",
-            callback_data=f"intensive_open:{campaign_value}",
-        )
-    )
     return markup
+
+
+async def _prompt_leave_phone(
+    message: types.Message,
+    state: FSMContext,
+    campaign_value: str,
+    user_id: int,
+    username: str | None,
+    *,
+    meta_extra: dict | None = None,
+) -> None:
+    await state.update_data(campaign=campaign_value)
+    await state.update_data(
+        lead_context={"flow": "default", "campaign": campaign_value}
+    )
+    await stats.log_event(
+        user_id,
+        campaign_value,
+        "lead_prompt",
+        _meta(user_id, campaign_value, username, meta_extra),
+        username=username,
+    )
+    from app.keyboards.common import kb_send_contact
+
+    await message.answer("Отправь, пожалуйста, свой номер.", reply_markup=kb_send_contact())
 
 
 async def cmd_start(message: types.Message, state: FSMContext) -> None:
@@ -227,6 +246,10 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
         await call.message.answer(
             "Отлично! Теперь забери свой подарок.",
             reply_markup=keyboard,
+        )
+        await call.message.answer(
+            "Дополнительные опции находятся на клавиатуре ниже.",
+            reply_markup=kb_main_menu(),
         )
         data = await state.get_data()
         autostart = data.get("lottery_autostart") if isinstance(data, dict) else None
@@ -431,32 +454,62 @@ async def callback_start_lottery(call: types.CallbackQuery, state: FSMContext) -
     await _start_lottery_flow(call, campaign_value, trigger="lottery_button")
 
 
+async def message_leave_phone(message: types.Message, state: FSMContext) -> None:
+    if not message.text:
+        return
+    data = await state.get_data()
+    campaign_value = "default"
+    if isinstance(data, dict):
+        campaign_value = safe_text(data.get("campaign")) or "default"
+    raw_username = message.from_user.username if message.from_user else None
+    username = safe_text(raw_username) or None
+    await _prompt_leave_phone(
+        message,
+        state,
+        campaign_value,
+        message.from_user.id,
+        username,
+        meta_extra={"source": "menu"},
+    )
+
+
+async def message_open_intensive(message: types.Message, state: FSMContext) -> None:
+    if not message.text:
+        return
+    from app.handlers import intensive as intensive_handlers
+
+    await intensive_handlers.cmd_intensive(message, state)
+
+
 async def callback_leave_phone(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     campaign_value = "default"
     if call.data:
         campaign_value = safe_text(call.data.split(":", 1)[1] if ":" in call.data else call.data)
     campaign_value = campaign_value or "default"
-    await state.update_data(campaign=campaign_value)
     raw_username = call.from_user.username if call.from_user else None
     username = safe_text(raw_username) or None
-    await state.update_data(
-        lead_context={"flow": "default", "campaign": campaign_value}
-    )
-    await stats.log_event(
-        call.from_user.id,
+    await _prompt_leave_phone(
+        call.message,
+        state,
         campaign_value,
-        "lead_prompt",
-        _meta(call.from_user.id, campaign_value, username),
-        username=username,
+        call.from_user.id,
+        username,
     )
-    from app.keyboards.common import kb_send_contact
-
-    await call.message.answer("Отправь, пожалуйста, свой номер.", reply_markup=kb_send_contact())
 
 
 def register(dp: Dispatcher) -> None:
     dp.register_message_handler(cmd_start, commands=["start"], state="*")
+    dp.register_message_handler(
+        message_leave_phone,
+        lambda m: m.text == "📞 Оставить контакт",
+        state="*",
+    )
+    dp.register_message_handler(
+        message_open_intensive,
+        lambda m: m.text == "🥐 Производственный интенсив",
+        state="*",
+    )
     dp.register_callback_query_handler(callback_check_sub, lambda c: c.data and c.data.startswith("check_sub:"))
     dp.register_callback_query_handler(callback_get_gift, lambda c: c.data and c.data.startswith("get_gift:"))
     dp.register_callback_query_handler(callback_start_lottery, lambda c: c.data and c.data.startswith("start_lottery:"))
