@@ -8,7 +8,7 @@ from aiogram.dispatcher import FSMContext
 
 from app.config import get_settings
 from app.handlers import intensive as intensive_handlers
-from app.keyboards.common import kb_send_contact
+from app.keyboards.common import kb_main_menu, kb_send_contact
 from app.services import alerts, phone, reminders, sheets, stats
 from app.storage import db
 
@@ -34,6 +34,10 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
     if message.text and message.text.lower() == "отмена":
         await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
         await state.update_data(lead_context=None)
+        await message.answer(
+            "Хорошо, действия доступны на клавиатуре ниже.",
+            reply_markup=kb_main_menu(),
+        )
         return
 
     contact_phone: str | None = None
@@ -124,6 +128,10 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
     await message.answer(
         "Спасибо! Мы свяжемся с тобой в ближайшее время.",
         reply_markup=types.ReplyKeyboardRemove(),
+    )
+    await message.answer(
+        "Если понадобится, воспользуйся клавиатурой ниже.",
+        reply_markup=kb_main_menu(),
     )
     await alerts.notify_new_lead(
         message.bot,
