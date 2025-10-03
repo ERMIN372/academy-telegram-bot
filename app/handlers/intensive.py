@@ -183,22 +183,6 @@ async def _prompt_check_subscription(chat_id: int, campaign: str, bot: Bot) -> N
     )
 
 
-async def callback_open(call: types.CallbackQuery, state: FSMContext) -> None:
-    await call.answer()
-    campaign = "default"
-    if call.data and ":" in call.data:
-        campaign = safe_text(call.data.split(":", 1)[1]) or "default"
-    await state.update_data(campaign=campaign)
-    data = await state.get_data()
-    intensive_state = _get_intensive_state(data)
-    intensive_state["campaign"] = campaign
-    intensive_state["sub_ok"] = True
-    intensive_state["sub_confirmed_at"] = time.time()
-    intensive_state.setdefault("qa_last_response", 0.0)
-    intensive_state.pop("last_topic", None)
-    await state.update_data(intensive=intensive_state)
-    await _show_menu(call.message, campaign, source="main_menu_button")
-
 
 async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
@@ -662,9 +646,6 @@ async def process_lead_message(
 
 def register(dp: Dispatcher) -> None:
     dp.register_message_handler(cmd_intensive, commands=["intensive"], state="*")
-    dp.register_callback_query_handler(
-        callback_open, lambda c: c.data and c.data.startswith("intensive_open:")
-    )
     dp.register_callback_query_handler(
         callback_check_sub,
         lambda c: c.data and c.data.startswith("intensive_check_sub:"),
