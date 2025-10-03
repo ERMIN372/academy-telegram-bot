@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from app.config import get_settings
-from app.handlers import admin, contacts, fun_interactive, lottery, start
+from app.handlers import admin, contacts, fun_interactive, intensive, lottery, start
 from app.services import alerts
 
 logging.basicConfig(
@@ -19,6 +19,7 @@ bot = Bot(token=settings.telegram_bot_token, parse_mode="HTML")
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 start.register(dp)
+intensive.register(dp)
 contacts.register(dp)
 lottery.register(dp)
 fun_interactive.register(dp)

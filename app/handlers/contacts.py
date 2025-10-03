@@ -7,6 +7,7 @@ from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 
 from app.config import get_settings
+from app.handlers import intensive as intensive_handlers
 from app.keyboards.common import kb_send_contact
 from app.services import alerts, phone, reminders, sheets, stats
 from app.storage import db
@@ -19,20 +20,33 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
         return
 
     data = await state.get_data()
-    campaign = str(data.get("campaign") or "default")
+    lead_context = data.get("lead_context")
+    if not lead_context:
+        return
+
+    flow = str(lead_context.get("flow") or "default").lower()
+    campaign = str(lead_context.get("campaign") or data.get("campaign") or "default")
+
+    if flow == "intensive":
+        await intensive_handlers.process_lead_message(message, state, lead_context)
+        return
 
     if message.text and message.text.lower() == "отмена":
         await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
+        await state.update_data(lead_context=None)
         return
 
-    contact_phone = None
+    contact_phone: str | None = None
     if message.contact and message.contact.phone_number:
         contact_phone = message.contact.phone_number
     elif message.text:
         contact_phone = message.text
 
     if not contact_phone:
-        await message.answer("Пожалуйста, отправь номер телефона или нажми Отмена.", reply_markup=kb_send_contact())
+        await message.answer(
+            "Пожалуйста, отправь номер телефона или нажми Отмена.",
+            reply_markup=kb_send_contact(),
+        )
         return
 
     normalized_phone = phone.normalize(contact_phone)
@@ -119,6 +133,7 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
         campaign=campaign,
         created_at=created_at,
     )
+    await state.update_data(lead_context=None)
 
 
 def register(dp: Dispatcher) -> None:
