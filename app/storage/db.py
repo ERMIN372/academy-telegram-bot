@@ -117,6 +117,21 @@ async def insert_coupon(user_id: int, campaign: str, code: str) -> None:
         await db.commit()
 
 
+async def get_lead(user_id: int, campaign: str) -> Optional[Dict[str, Any]]:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT user_id, campaign, created_at FROM leads WHERE user_id=? AND campaign=?",
+            (user_id, campaign),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        if row is None:
+            return None
+        return dict(row)
+
+
 async def upsert_lead(user_id: int, campaign: str) -> None:
     await init_db()
     async with aiosqlite.connect(_db_file) as db:

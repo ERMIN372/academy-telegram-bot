@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     alerts_time_format: str = Field(
         default="%Y-%m-%d %H:%M:%S", alias="ALERTS_TIME_FORMAT"
     )
+    qa_enabled: bool = Field(default=False, alias="QA_ENABLED")
+    qa_fallback_to_menu: bool = Field(default=True, alias="QA_FALLBACK_TO_MENU")
+    qa_unknown_answer: str = Field(
+        default=(
+            "Не нашёл ответ 🤔. Выберите тему ниже или нажмите «📝 Записаться»."
+        ),
+        alias="QA_UNKNOWN_ANSWER",
+    )
+    qa_rate_limit_seconds: int = Field(default=2, alias="QA_RATE_LIMIT_SECONDS")
+    qa_buttons_shown: bool = Field(default=True, alias="QA_BUTTONS_SHOWN")
 
     @field_validator("mode")
     @classmethod
@@ -144,6 +154,21 @@ class Settings(BaseSettings):
     @classmethod
     def parse_alerts_mask_phone(cls, value: Any) -> bool:
         return cls._parse_bool(value, default=True)
+
+    @field_validator("qa_enabled", mode="before")
+    @classmethod
+    def parse_qa_enabled(cls, value: Any) -> bool:
+        return cls._parse_bool(value)
+
+    @field_validator("qa_fallback_to_menu", "qa_buttons_shown", mode="before")
+    @classmethod
+    def parse_qa_flags(cls, value: Any) -> bool:
+        return cls._parse_bool(value, default=True)
+
+    @field_validator("qa_rate_limit_seconds")
+    @classmethod
+    def validate_qa_rate_limit(cls, value: int) -> int:
+        return max(0, value)
 
     @field_validator(
         "reminder_enabled",

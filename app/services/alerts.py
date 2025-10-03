@@ -54,6 +54,8 @@ class AlertManager:
         phone: str,
         campaign: str,
         created_at: dt.datetime,
+        title: str | None = None,
+        error: str | None = None,
     ) -> None:
         settings = get_settings()
         campaign_text = safe_text(campaign) or "default"
@@ -83,26 +85,34 @@ class AlertManager:
         display_phone = (
             phone_text if not settings.alerts_mask_phone else mask_phone(phone_text)
         )
-        created_at_display = _format_lead_timestamp(created_at, settings)
+        local_display = _format_lead_timestamp(created_at, settings)
+        utc_display = _format_utc_timestamp(created_at)
         mention = self._mention_line(settings)
         user_display = html.escape(user_id_text or "—")
         display_phone_escaped = html.escape(display_phone)
         campaign_display = html.escape(campaign_text)
-        created_at_display = safe_text(created_at_display)
+        local_display = safe_text(local_display)
+        title_text = safe_text(title) or "🆕 Новый лид"
         body_lines = [
-            "🆕 Новый лид",
+            title_text,
             f"ID: <code>{user_display}</code>",
             f"Профиль: <a href=\"{html.escape(link)}\">{html.escape(label)}</a>",
             f"Телефон: <code>{display_phone_escaped}</code>",
             f"Кампания: <code>{campaign_display or 'default'}</code>",
-            f"Создано: <code>{html.escape(created_at_display)}</code>",
-            "Ответить в ЛС/созвонить в рабочее время",
+            f"Создано: <code>{html.escape(local_display)}</code>",
+            f"UTC: <code>{html.escape(utc_display)}</code>",
         ]
+        if error:
+            body_lines.append(f"Ошибка: <code>{html.escape(error)}</code>")
+        body_lines.append("Ответить в ЛС/созвонить в рабочее время")
         message = self._compose_message(mention, body_lines)
         meta = {
             "type": "new_lead",
             "campaign": campaign_text,
+            "masked": settings.alerts_mask_phone,
         }
+        if error:
+            meta["error"] = safe_text(error)
 
         delivered = await self._deliver(bot, message, key, user_id, campaign_text, meta)
         if delivered:
@@ -442,6 +452,8 @@ async def notify_new_lead(
     phone: str,
     campaign: str,
     created_at: dt.datetime,
+    title: str | None = None,
+    error: str | None = None,
 ) -> None:
     manager = get_alert_manager()
     await manager.notify_new_lead(
@@ -451,6 +463,8 @@ async def notify_new_lead(
         phone=phone,
         campaign=campaign,
         created_at=created_at,
+        title=title,
+        error=error,
     )
 
 
@@ -482,6 +496,15 @@ def _format_lead_timestamp(moment: dt.datetime, settings) -> str:
         formatted = localized.strftime(DEFAULT_ALERT_TIME_FORMAT)
     tz_label = _timezone_label(localized)
     return f"{formatted} {tz_label}".strip()
+
+
+def _format_utc_timestamp(moment: dt.datetime) -> str:
+    aware = moment
+    if aware.tzinfo is None:
+        aware = aware.replace(tzinfo=dt.timezone.utc)
+    else:
+        aware = aware.astimezone(dt.timezone.utc)
+    return aware.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 @lru_cache(maxsize=8)
