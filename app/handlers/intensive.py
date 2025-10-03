@@ -4,6 +4,7 @@ import datetime as dt
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional
 
 from aiogram import Bot, Dispatcher, types
@@ -118,6 +119,17 @@ TOPICS: tuple[QATopic, ...] = (
 )
 
 TOPIC_BY_KEY: Dict[str, QATopic] = {topic.key: topic for topic in TOPICS}
+
+
+MEDIA_DIR = Path(__file__).resolve().parents[2]
+
+TOPIC_PHOTOS: Dict[str, Path] = {
+    "certificate": MEDIA_DIR / "11.png.webp",
+    "included": MEDIA_DIR / "10.jpg.webp",
+    "speakers": MEDIA_DIR / "9.jpg.webp",
+    "program": MEDIA_DIR / "12.jpg",
+    "location": MEDIA_DIR / "13.jpg",
+}
 
 
 def _topics_for_keyboard() -> list[tuple[str, str]]:
@@ -294,10 +306,7 @@ async def callback_topic(call: types.CallbackQuery, state: FSMContext) -> None:
         )
         return
 
-    await call.message.answer(
-        _answer_with_cta(topic.answer),
-        reply_markup=qa_answer_keyboard(campaign),
-    )
+    await _send_topic_answer(call.message, topic, campaign)
     intensive_state["qa_last_response"] = time.time()
     intensive_state["last_topic"] = topic.key
     await state.update_data(intensive=intensive_state)
@@ -312,6 +321,29 @@ async def callback_topic(call: types.CallbackQuery, state: FSMContext) -> None:
 
 def _answer_with_cta(text: str) -> str:
     return f"{text}\n\nГотовы присоединиться? Жмите «📝 Записаться»."
+
+
+def _photo_for_topic(topic_key: str) -> Optional[Path]:
+    path = TOPIC_PHOTOS.get(topic_key)
+    if path and path.exists():
+        return path
+    return None
+
+
+async def _send_topic_answer(
+    message: types.Message, topic: QATopic, campaign: str
+) -> None:
+    reply_markup = qa_answer_keyboard(campaign)
+    photo_path = _photo_for_topic(topic.key)
+    text = _answer_with_cta(topic.answer)
+    if photo_path:
+        await message.answer_photo(
+            types.InputFile(str(photo_path)),
+            caption=text,
+            reply_markup=reply_markup,
+        )
+        return
+    await message.answer(text, reply_markup=reply_markup)
 
 
 async def callback_menu(call: types.CallbackQuery, state: FSMContext) -> None:
@@ -377,10 +409,7 @@ async def qa_text_handler(message: types.Message, state: FSMContext) -> None:
                 source="text_intent",
             )
             return
-        await message.answer(
-            _answer_with_cta(topic.answer),
-            reply_markup=qa_answer_keyboard(campaign),
-        )
+        await _send_topic_answer(message, topic, campaign)
         intensive_state["qa_last_response"] = time.time()
         intensive_state["last_topic"] = topic.key
         await state.update_data(intensive=intensive_state)
