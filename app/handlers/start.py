@@ -434,6 +434,9 @@ async def callback_leave_phone(call: types.CallbackQuery, state: FSMContext) -> 
     await state.update_data(campaign=campaign_value)
     raw_username = call.from_user.username if call.from_user else None
     username = safe_text(raw_username) or None
+    await state.update_data(
+        lead_context={"flow": "default", "campaign": campaign_value}
+    )
     await stats.log_event(
         call.from_user.id,
         campaign_value,
