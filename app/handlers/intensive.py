@@ -166,7 +166,7 @@ async def cmd_intensive(message: types.Message, state: FSMContext) -> None:
         f"https://t.me/{settings.channel_username.lstrip('@')}"
     )
     await message.answer(
-        "Привет! Это производственный интенсив Академии. Подписывайтесь на канал, "
+        "Привет! Это производственный интенсив Академии Нефтьмагистраль и Караваевы. Подписывайтесь на канал, "
         "а я подскажу детали и помогу записаться.",
         reply_markup=subscribe_markup,
     )
