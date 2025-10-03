@@ -124,6 +124,7 @@ TOPIC_BY_KEY: Dict[str, QATopic] = {topic.key: topic for topic in TOPICS}
 MEDIA_DIR = Path(__file__).resolve().parents[2]
 
 TOPIC_PHOTOS: Dict[str, Path] = {
+    "schedule": MEDIA_DIR / "14.jpg",
     "certificate": MEDIA_DIR / "11.png.webp",
     "included": MEDIA_DIR / "10.jpg.webp",
     "speakers": MEDIA_DIR / "9.jpg.webp",
