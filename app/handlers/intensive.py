@@ -183,6 +183,7 @@ async def _prompt_check_subscription(chat_id: int, campaign: str, bot: Bot) -> N
     )
 
 
+
 async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     campaign = "default"

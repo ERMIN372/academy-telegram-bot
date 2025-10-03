@@ -54,6 +54,12 @@ def _after_sub_keyboard(
             text="📞 Оставить контакт", callback_data=f"leave_phone:{campaign_value}"
         )
     )
+    markup.add(
+        types.InlineKeyboardButton(
+            text="🥐 Производственный интенсив",
+            callback_data=f"intensive_open:{campaign_value}",
+        )
+    )
     return markup
 
 
