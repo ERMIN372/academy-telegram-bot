@@ -165,11 +165,20 @@ async def cmd_intensive(message: types.Message, state: FSMContext) -> None:
     subscribe_markup = kb_subscribe(
         f"https://t.me/{settings.channel_username.lstrip('@')}"
     )
-    await message.answer(
-        "Привет! Это производственный интенсив Академии Нефтьмагистраль и Караваевы. Подписывайтесь на канал, "
-        "а я подскажу детали и помогу записаться.",
-        reply_markup=subscribe_markup,
+
+    welcome_text = (
+        "Привет! Это производственный интенсив Академии Нефтьмагистраль и Караваевы. "
+        "Подписывайтесь на канал, а я подскажу детали и помогу записаться."
     )
+    welcome_photo = MEDIA_DIR / "16.webp"
+    if welcome_photo.exists():
+        await message.answer_photo(
+            types.InputFile(str(welcome_photo)),
+            caption=welcome_text,
+            reply_markup=subscribe_markup,
+        )
+    else:
+        await message.answer(welcome_text, reply_markup=subscribe_markup)
 
     is_member = await sub_check.is_member(message.bot, message.from_user.id)
     if is_member:
