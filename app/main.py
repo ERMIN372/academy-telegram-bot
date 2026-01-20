@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from aiogram import Dispatcher, types
+from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -32,7 +32,7 @@ async def tg_webhook(request: Request) -> JSONResponse:
     data = await request.json()
     update = types.Update(**data)
     # Set bot instance in context for webhook mode
-    types.Bot.set_current(bot)
+    Bot.set_current(bot)
     await dp.process_update(update)
     return JSONResponse({"ok": True})
 
