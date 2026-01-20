@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
     mode: str = Field(default="polling", alias="MODE")
     webhook_url: str | None = Field(default=None, alias="WEBHOOK_URL")
-    secret_token: str = Field(alias="SECRET_TOKEN")
+    secret_token: str = Field(default="change_me_secret_token", alias="SECRET_TOKEN")
     admin_chat_id_raw: str | None = Field(default=None, alias="ADMIN_CHAT_ID")
-    channel_username: str = Field(alias="CHANNEL_USERNAME")
-    google_sheets_id: str = Field(alias="GOOGLE_SHEETS_ID")
-    google_service_json_b64: str = Field(alias="GOOGLE_SERVICE_JSON_B64")
+    channel_username: str = Field(default="@change_me", alias="CHANNEL_USERNAME")
+    google_sheets_id: str = Field(default="", alias="GOOGLE_SHEETS_ID")
+    google_service_json_b64: str = Field(default="e30=", alias="GOOGLE_SERVICE_JSON_B64")
     sheets_tz: str = Field(default="Europe/Moscow", alias="SHEETS_TZ")
     sheets_time_format: str = Field(
         default="%Y-%m-%d %H:%M:%S", alias="SHEETS_TIME_FORMAT"

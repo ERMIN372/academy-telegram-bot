@@ -31,6 +31,8 @@ async def tg_webhook(request: Request) -> JSONResponse:
         raise HTTPException(status_code=403, detail="Forbidden")
     data = await request.json()
     update = types.Update(**data)
+    # Set bot instance in context for webhook mode
+    types.Bot.set_current(bot)
     await dp.process_update(update)
     return JSONResponse({"ok": True})
 
@@ -50,12 +52,15 @@ async def setup_webhook() -> None:
     await bot.delete_webhook(drop_pending_updates=True)
     if not settings.webhook_url:
         raise RuntimeError("WEBHOOK_URL is not configured")
+    # Remove trailing slash from webhook_url to avoid double slashes
+    base_url = settings.webhook_url.rstrip("/")
+    webhook_path = f"{base_url}/tg/webhook"
     await bot.set_webhook(
-        url=f"{settings.webhook_url}/tg/webhook",
+        url=webhook_path,
         secret_token=settings.secret_token,
         allowed_updates=["message", "callback_query", "chat_member"],
     )
-    logger.info("Webhook set to %s", settings.webhook_url)
+    logger.info("Webhook set to %s", webhook_path)
 
 
 async def drop_webhook() -> None:
