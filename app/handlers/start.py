@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from html import escape
 
 from aiogram import Dispatcher, types
@@ -20,6 +21,20 @@ from app.storage import db
 from app.utils import safe_text
 
 logger = logging.getLogger(__name__)
+
+MEDIA_DIR = Path(__file__).resolve().parents[2]
+WELCOME_VIDEO = MEDIA_DIR / "freepik_-_1440x1440_24fps_90157.mp4"
+WELCOME_TEXT = (
+    "👋 Добрый день! Рады приветствовать вас в нашем Телеграм-боте!\n\n"
+    "Я – Академик, ваш проводник по миру знаний и возможностей нашей Академии.\n"
+    "Здесь вы сможете:\n"
+    "🎁 Получать подарки и бонусы\n"
+    "📚 Получать полезные материалы после наших мероприятий\n"
+    "❓ Задавать вопросы о наших программах\n"
+    "📝 Записываться на курсы и оставлять заявки\n\n"
+    "Чтобы получить первый подарок и всегда быть в курсе всех событий Академии — "
+    "подпишитесь на наш канал @campus_neftmbk"
+)
 
 
 def _meta(user_id: int, campaign: str, username: str | None, extra: dict | None = None) -> dict:
@@ -180,10 +195,14 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             await state.update_data(lottery_autostart=None)
             return
 
-    await message.answer(
-        "Привет! Чтобы получить подарок, подпишись на канал и вернись сюда за проверкой.",
-        reply_markup=subscribe_markup,
-    )
+    if WELCOME_VIDEO.exists():
+        await message.answer_video(
+            types.InputFile(str(WELCOME_VIDEO)),
+            caption=WELCOME_TEXT,
+            reply_markup=subscribe_markup,
+        )
+    else:
+        await message.answer(WELCOME_TEXT, reply_markup=subscribe_markup)
     await message.answer(
         "Когда подпишешься, нажми кнопку ниже.",
         reply_markup=kb_check_sub(campaign),
