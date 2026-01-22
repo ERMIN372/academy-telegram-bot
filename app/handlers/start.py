@@ -23,7 +23,7 @@ from app.utils import safe_text
 logger = logging.getLogger(__name__)
 
 MEDIA_DIR = Path(__file__).resolve().parents[2]
-WELCOME_VIDEO = MEDIA_DIR / "freepik_-_1440x1440_24fps_90157.mp4"
+WELCOME_VIDEO = MEDIA_DIR / "IMG_3109.MP4"
 WELCOME_TEXT = (
     "👋 Добрый день! Рады приветствовать вас в нашем Телеграм-боте!\n\n"
     "Я – Академик, ваш проводник по миру знаний и возможностей нашей Академии.\n"
