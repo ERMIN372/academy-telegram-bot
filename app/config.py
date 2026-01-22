@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     reminder_text: str = Field(
         default=(
             "Хэй! Подарок всё ещё ждёт 😊 Используй код <b>{code}</b>, "
-            "чтобы забрать скидку. Нужна подсказка? Нажми «Оставить контакт»."
+            "чтобы забрать скидку. Нужна подсказка? Нажмите «Оставить контакт»."
         ),
         alias="REMINDER_TEXT",
     )
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
         default_factory=dict, alias="LOTTERY_COUPON_CAMPAIGN_MAP"
     )
     lottery_cooldown_days: int = Field(default=1, alias="LOTTERY_COOLDOWN_DAYS")
-    lottery_title: str = Field(default="Выбирай окно 🎁", alias="LOTTERY_TITLE")
+    lottery_title: str = Field(default="Выберите окно 🎁", alias="LOTTERY_TITLE")
     lottery_button_emoji: str = Field(default="🎯", alias="LOTTERY_BUTTON_EMOJI")
     lottery_button_label: str = Field(default="🎲 Лотерея", alias="LOTTERY_BTN_LABEL")
     draw_prefix: str = Field(default="draw_", alias="DRAW_PREFIX")

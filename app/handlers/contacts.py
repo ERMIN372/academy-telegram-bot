@@ -48,14 +48,16 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
 
     if not contact_phone:
         await message.answer(
-            "Пожалуйста, отправь номер телефона или нажми Отмена.",
+            "Пожалуйста, отправьте номер телефона или нажмите Отмена.",
             reply_markup=kb_send_contact(),
         )
         return
 
     normalized_phone = phone.normalize(contact_phone)
     if not normalized_phone:
-        await message.answer("Не удалось распознать номер. Попробуй в формате +7XXXXXXXXXX.")
+        await message.answer(
+            "Не удалось распознать номер. Попробуйте в формате +7XXXXXXXXXX."
+        )
         return
 
     raw_username = message.from_user.username or ""
@@ -126,11 +128,11 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
     await db.upsert_lead(message.from_user.id, campaign)
     await reminders.cancel_due_to_lead(message.from_user.id, campaign)
     await message.answer(
-        "Спасибо! Мы свяжемся с тобой в ближайшее время.",
+        "Спасибо! Мы свяжемся с вами в ближайшее время.",
         reply_markup=types.ReplyKeyboardRemove(),
     )
     await message.answer(
-        "Если понадобится, воспользуйся клавиатурой ниже.",
+        "Если понадобится, воспользуйтесь клавиатурой ниже.",
         reply_markup=kb_main_menu(),
     )
     await alerts.notify_new_lead(

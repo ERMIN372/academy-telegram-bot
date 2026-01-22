@@ -94,7 +94,7 @@ async def _prompt_leave_phone(
     )
     from app.keyboards.common import kb_send_contact
 
-    await message.answer("Отправь, пожалуйста, свой номер.", reply_markup=kb_send_contact())
+    await message.answer("Отправьте, пожалуйста, ваш номер.", reply_markup=kb_send_contact())
 
 
 async def cmd_start(message: types.Message, state: FSMContext) -> None:
@@ -138,7 +138,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             reply_markup=subscribe_markup,
         )
         await message.answer(
-            "Когда подпишешься, нажми кнопку ниже.",
+            "Когда подпишетесь, нажмите кнопку ниже.",
             reply_markup=kb_check_sub(campaign),
         )
         return
@@ -183,7 +183,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             )
             from app.handlers import lottery as lottery_handlers
 
-            await message.answer("Привет! Ты уже в клубе — запускаем розыгрыш.")
+            await message.answer("Привет! Вы уже в клубе — запускаем розыгрыш.")
             await lottery_handlers.present_lottery(
                 message,
                 message.from_user.id,
@@ -204,7 +204,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
     else:
         await message.answer(WELCOME_TEXT, reply_markup=subscribe_markup)
     await message.answer(
-        "Когда подпишешься, нажми кнопку ниже.",
+        "Когда подпишетесь, нажмите кнопку ниже.",
         reply_markup=kb_check_sub(campaign),
     )
 
@@ -263,7 +263,7 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
             lottery_label=config.button_label,
         )
         await call.message.answer(
-            "Отлично! Теперь забери свой подарок.",
+            "Отлично! Теперь заберите ваш подарок.",
             reply_markup=keyboard,
         )
         await call.message.answer(
@@ -301,18 +301,18 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
             ),
             username=username,
         )
-        await call.message.answer("Похоже, подписка еще не оформлена. Попробуй снова позже.")
+        await call.message.answer("Похоже, подписка еще не оформлена. Попробуйте снова позже.")
 
 
 async def _send_coupon(message: types.Message, code: str, campaign: str) -> None:
     code_text = safe_text(code)
     text = (
-        f"Твой уникальный купон: <b>{escape(code_text)}</b>\n\n"
+        f"Ваш уникальный купон: <b>{escape(code_text)}</b>\n\n"
         "Условия использования:\n"
         "• Купон не суммируется с другими акциями.\n"
         "• Не подходит для продления действующей подписки.\n"
         "• Действует до дедлайна кампании.\n\n"
-        "Оставь контакт, чтобы получить напоминание и инструкции."
+        "Оставьте контакт, чтобы получить напоминание и инструкции."
     )
     await message.answer(text, reply_markup=kb_after_coupon(campaign))
 
