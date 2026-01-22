@@ -8,10 +8,10 @@ from app.keyboards.lottery import kb_lottery_result, kb_lottery_windows
 from app.services import lottery as lottery_service, stats
 
 RESULT_FOLLOW_UP = (
-    "Нажми кнопку, чтобы забрать подарок. Если понадобится помощь — оставь контакт."
+    "Нажмите кнопку, чтобы забрать подарок. Если понадобится помощь — оставьте контакт."
 )
 
-ENTRY_PROMPT = "Сегодня разыгрываем призы! Выбирай одно из окошек 👇"
+ENTRY_PROMPT = "Сегодня разыгрываем призы! Выберите одно из окошек 👇"
 
 
 def _meta(user_id: int, campaign: str, username: str | None, extra: dict | None = None) -> dict:
@@ -30,12 +30,12 @@ def _result_text(result: str, variant_index: int | None, repeat: bool = False) -
     if repeat:
         return (
             f"🔁 {window_part}\n"
-            f"Твой приз — <b>{result}</b>.\n\n"
+            f"Ваш приз — <b>{result}</b>.\n\n"
             f"{RESULT_FOLLOW_UP}"
         )
     return (
         f"🎉 {window_part}\n"
-        f"Твой приз — <b>{result}</b>!\n\n"
+        f"Ваш приз — <b>{result}</b>!\n\n"
         f"{RESULT_FOLLOW_UP}"
     )
 
@@ -49,7 +49,7 @@ def _cooldown_text(result: str, variant_index: int | None, until: dt.datetime) -
     return (
         f"🔁 {window_part}\n"
         f"Вы уже участвовали, вернёмся {until.strftime('%d.%m')}.\n"
-        f"Твой приз — <b>{result}</b>.\n\n"
+        f"Ваш приз — <b>{result}</b>.\n\n"
         f"{RESULT_FOLLOW_UP}"
     )
 
@@ -228,11 +228,11 @@ async def callback_lottery_pick(call: types.CallbackQuery) -> None:
                 reply_markup=kb_lottery_result(session.campaign),
             )
         else:
-            await call.message.edit_text("Розыгрыш завершён. Попробуй запустить его снова.")
+            await call.message.edit_text("Розыгрыш завершён. Попробуйте запустить его снова.")
         return
 
     if not session.is_active:
-        await call.message.edit_text("Время розыгрыша истекло. Попробуй начать заново.")
+        await call.message.edit_text("Время розыгрыша истекло. Попробуйте начать заново.")
         await stats.log_event(
             call.from_user.id,
             session.campaign,
@@ -305,7 +305,9 @@ async def callback_lottery_claim(call: types.CallbackQuery) -> None:
     username = call.from_user.username if call.from_user else None
     draw = await lottery_service.get_draw(call.from_user.id, campaign)
     if not draw:
-        await call.message.answer("Похоже, результат не найден. Попробуй начать розыгрыш заново.")
+        await call.message.answer(
+            "Похоже, результат не найден. Попробуйте начать розыгрыш заново."
+        )
         return
 
     coupon_campaign = draw.coupon_campaign or campaign
@@ -318,7 +320,7 @@ async def callback_lottery_claim(call: types.CallbackQuery) -> None:
         stats_campaign=campaign,
         no_coupons_message=(
             "Упс! Похоже, подарки этой категории временно закончились. "
-            "Попробуй выбрать другое окно завтра."
+            "Попробуйте выбрать другое окно завтра."
         ),
     )
     if success:
