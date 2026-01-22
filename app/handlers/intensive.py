@@ -116,10 +116,7 @@ TOPIC_BY_KEY: Dict[str, QATopic] = {topic.key: topic for topic in TOPICS}
 
 MEDIA_DIR = Path(__file__).resolve().parents[2]
 
-TOPIC_PHOTOS: Dict[str, Path] = {
-    "speakers": MEDIA_DIR / "9.jpg.webp",
-    "program": MEDIA_DIR / "12.jpg",
-}
+TOPIC_PHOTOS: Dict[str, Path] = {}
 
 
 def _topics_for_keyboard() -> list[tuple[str, str]]:
