@@ -11,7 +11,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher import FSMContext
 
 from app.config import get_settings
-from app.keyboards.common import kb_subscribe
 from app.keyboards.intensive import (
     kb_request_phone,
     qa_answer_keyboard,
@@ -148,8 +147,10 @@ async def cmd_intensive(message: types.Message, state: FSMContext) -> None:
     await state.update_data(intensive=intensive_state)
 
     settings = get_settings()
-    subscribe_markup = kb_subscribe(
-        f"https://t.me/{settings.channel_username.lstrip('@')}"
+    menu_markup = (
+        qa_menu_keyboard(campaign, _topics_for_keyboard())
+        if settings.qa_buttons_shown
+        else None
     )
 
     welcome_text = (
@@ -164,17 +165,24 @@ async def cmd_intensive(message: types.Message, state: FSMContext) -> None:
         await message.answer_photo(
             types.InputFile(str(welcome_photo)),
             caption=welcome_text,
-            reply_markup=subscribe_markup,
+            reply_markup=menu_markup,
         )
     else:
-        await message.answer(welcome_text, reply_markup=subscribe_markup)
+        await message.answer(welcome_text, reply_markup=menu_markup)
 
     is_member = await sub_check.is_member(message.bot, message.from_user.id)
     if is_member:
         intensive_state["sub_ok"] = True
         intensive_state["sub_confirmed_at"] = time.time()
         await state.update_data(intensive=intensive_state)
-        await _show_menu(message, campaign, source="command")
+        if settings.qa_enabled:
+            await stats.log_event(
+                message.from_user.id,
+                campaign,
+                "qa_entry",
+                {"source": "command"},
+                username=safe_text(message.from_user.username) or None,
+            )
     else:
         await _prompt_check_subscription(message.chat.id, campaign, message.bot)
 
