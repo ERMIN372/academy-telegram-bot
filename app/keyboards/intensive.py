@@ -31,7 +31,7 @@ def qa_answer_keyboard(campaign: str) -> InlineKeyboardMarkup:
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(
         InlineKeyboardButton(
-            text="📝 Записаться",
+            text="📝Записаться",
             callback_data=f"intensive_lead:{campaign_value}",
         )
     )

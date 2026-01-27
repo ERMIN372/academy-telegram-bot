@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     reminder_text: str = Field(
         default=(
             "Хэй! Подарок всё ещё ждёт 😊 Используй код <b>{code}</b>, "
-            "чтобы забрать скидку. Нужна подсказка? Нажми «Оставить контакт»."
+            "чтобы забрать скидку. Нужна подсказка? Нажмите «Оставить контакт»."
         ),
         alias="REMINDER_TEXT",
     )
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
         default_factory=dict, alias="LOTTERY_COUPON_CAMPAIGN_MAP"
     )
     lottery_cooldown_days: int = Field(default=1, alias="LOTTERY_COOLDOWN_DAYS")
-    lottery_title: str = Field(default="Выбирай окно 🎁", alias="LOTTERY_TITLE")
+    lottery_title: str = Field(default="Выберите окно 🎁", alias="LOTTERY_TITLE")
     lottery_button_emoji: str = Field(default="🎯", alias="LOTTERY_BUTTON_EMOJI")
     lottery_button_label: str = Field(default="🎲 Лотерея", alias="LOTTERY_BTN_LABEL")
     draw_prefix: str = Field(default="draw_", alias="DRAW_PREFIX")
@@ -110,6 +110,8 @@ class Settings(BaseSettings):
                 continue
             if item.startswith("chat:") or item.startswith("user:"):
                 item = item.split(":", 1)[1].strip()
+            if item.startswith("@"):
+                continue
             if not item or item in {"0", "-0"}:
                 continue
             try:
@@ -118,6 +120,37 @@ class Settings(BaseSettings):
                 continue
         seen: set[int] = set()
         unique: list[int] = []
+        for value in result:
+            if value in seen:
+                continue
+            seen.add(value)
+            unique.append(value)
+        return tuple(unique)
+
+    @cached_property
+    def admin_usernames(self) -> tuple[str, ...]:
+        raw_value = self.admin_chat_id_raw
+        if not raw_value:
+            return ()
+        if isinstance(raw_value, (list, tuple)):
+            values = [str(item).strip() for item in raw_value]
+        else:
+            values = [part.strip() for part in str(raw_value).replace(";", ",").split(",")]
+        result: list[str] = []
+        for item in values:
+            if not item:
+                continue
+            if item.startswith("chat:") or item.startswith("user:"):
+                item = item.split(":", 1)[1].strip()
+            if item.startswith("@"):
+                item = item[1:]
+            if not item:
+                continue
+            if item.lstrip("-").isdigit():
+                continue
+            result.append(item.lower())
+        seen: set[str] = set()
+        unique: list[str] = []
         for value in result:
             if value in seen:
                 continue
@@ -322,9 +355,11 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def is_admin(user_id: int) -> bool:
-    """Check if user is admin."""
+def is_admin_user(user_id: int | None, username: str | None = None) -> bool:
     settings = get_settings()
-    if not settings.admin_chat_ids:
-        return False
-    return user_id in settings.admin_chat_ids
+    if user_id is not None and user_id in settings.admin_chat_ids:
+        return True
+    if username:
+        normalized = username.lstrip("@").lower()
+        return normalized in settings.admin_usernames
+    return False

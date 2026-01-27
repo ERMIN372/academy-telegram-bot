@@ -4,28 +4,27 @@ import logging
 
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
 
-from app.config import get_settings, is_admin
-from app.keyboards.common import kb_admin_panel, kb_cancel_admin, kb_main_menu
-from app.services import coupons, sheets
+from app.config import get_settings, is_admin_user
+from app.services import sheets
+from app.utils import safe_text
 
 logger = logging.getLogger(__name__)
 
-# FSM states for admin operations
-ADMIN_ADD_COUPON = "admin_add_coupon"
-ADMIN_ADD_COUPON_CAMPAIGN = "admin_add_coupon_campaign"
-ADMIN_ADD_BULK = "admin_add_bulk"
-ADMIN_ADD_BULK_CAMPAIGN = "admin_add_bulk_campaign"
+class AdminCouponStates(StatesGroup):
+    waiting_code = State()
+    waiting_campaign = State()
 
 
 async def cmd_ping(message: types.Message) -> None:
-    if not is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     await message.answer("pong")
 
 
 async def cmd_report(message: types.Message) -> None:
-    if not is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     events = await sheets.read("events")
     leads = await sheets.read("leads")
@@ -39,232 +38,115 @@ async def cmd_report(message: types.Message) -> None:
     await message.answer(text)
 
 
-async def handle_admin_panel(message: types.Message, state: FSMContext) -> None:
-    """Show admin panel when user clicks '⚙️ Админ панель' button."""
-    if not is_admin(message.from_user.id):
-        return
+def _admin_panel_kb() -> types.InlineKeyboardMarkup:
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton(text="➕ Добавить купон", callback_data="admin_add_coupon")
+    )
+    markup.add(
+        types.InlineKeyboardButton(text="📊 Отчет", callback_data="admin_report")
+    )
+    return markup
 
+
+async def cmd_admin(message: types.Message, state: FSMContext) -> None:
+    if not is_admin_user(message.from_user.id, message.from_user.username):
+        return
     await state.finish()
-    await message.answer(
-        "⚙️ <b>Админ панель</b>\n\nВыберите действие:",
-        reply_markup=kb_admin_panel(),
+    await message.answer("Админ-панель:", reply_markup=_admin_panel_kb())
+
+
+async def cmd_cancel(message: types.Message, state: FSMContext) -> None:
+    if not is_admin_user(message.from_user.id, message.from_user.username):
+        return
+    await state.finish()
+    await message.answer("Действие отменено.", reply_markup=_admin_panel_kb())
+
+
+async def callback_admin_report(call: types.CallbackQuery) -> None:
+    if not is_admin_user(call.from_user.id, call.from_user.username):
+        await call.answer()
+        return
+    await call.answer()
+    await cmd_report(call.message)
+
+
+async def callback_admin_add_coupon(call: types.CallbackQuery, state: FSMContext) -> None:
+    if not is_admin_user(call.from_user.id, call.from_user.username):
+        await call.answer()
+        return
+    await call.answer()
+    await state.finish()
+    await AdminCouponStates.waiting_code.set()
+    await call.message.answer(
+        "Отправьте код купона. Для отмены — /cancel."
     )
 
 
-async def callback_admin_action(callback: types.CallbackQuery, state: FSMContext) -> None:
-    """Handle admin panel callbacks."""
-    if not is_admin(callback.from_user.id):
-        await callback.answer("У вас нет доступа", show_alert=True)
+async def message_admin_coupon_code(message: types.Message, state: FSMContext) -> None:
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
-
-    action = callback.data.split(":")[1] if ":" in callback.data else ""
-
-    if action == "add_coupon":
-        await callback.message.edit_text(
-            "➕ <b>Добавление купона</b>\n\n"
-            "Отправьте код купона (например: PROMO123)\n"
-            "или нажмите Отмена для выхода.",
-        )
-        await state.set_state(ADMIN_ADD_COUPON)
-        await callback.message.answer("👇", reply_markup=kb_cancel_admin())
-
-    elif action == "add_bulk":
-        await callback.message.edit_text(
-            "➕ <b>Массовое добавление купонов</b>\n\n"
-            "Отправьте купоны, каждый с новой строки:\n"
-            "PROMO1\n"
-            "PROMO2\n"
-            "PROMO3\n\n"
-            "или нажмите Отмена для выхода.",
-        )
-        await state.set_state(ADMIN_ADD_BULK)
-        await callback.message.answer("👇", reply_markup=kb_cancel_admin())
-
-    elif action == "stats":
-        await callback.answer("Загружаю статистику...")
-        events = await sheets.read("events")
-        leads = await sheets.read("leads")
-        coupons_data = await sheets.read("coupons")
-
-        # Count coupon statuses
-        free_count = sum(1 for c in coupons_data if c.get("status", "").lower() in ["", "free"])
-        reserved_count = sum(1 for c in coupons_data if c.get("status", "").lower() == "reserved")
-        used_count = sum(1 for c in coupons_data if c.get("status", "").lower() == "used")
-
-        text = (
-            "📊 <b>Статистика</b>\n\n"
-            f"📝 Событий: {len(events)}\n"
-            f"👥 Лидов: {len(leads)}\n\n"
-            f"🎁 Купоны:\n"
-            f"├ Всего: {len(coupons_data)}\n"
-            f"├ Свободных: {free_count}\n"
-            f"├ Зарезервированных: {reserved_count}\n"
-            f"└ Использованных: {used_count}"
-        )
-        await callback.message.edit_text(text, reply_markup=kb_admin_panel())
-
-    elif action == "close":
-        await callback.message.delete()
-        await callback.message.answer(
-            "Админ панель закрыта",
-            reply_markup=kb_main_menu(is_admin=True),
-        )
-
-    await callback.answer()
-
-
-async def handle_add_coupon_code(message: types.Message, state: FSMContext) -> None:
-    """Handle coupon code input."""
-    if not is_admin(message.from_user.id):
+    if not message.text:
+        await message.answer("Пришлите текстовый код купона.")
         return
-
-    if message.text == "❌ Отмена":
-        await state.finish()
-        await message.answer(
-            "Отменено",
-            reply_markup=kb_main_menu(is_admin=True),
-        )
-        return
-
-    code = message.text.strip()
+    code = safe_text(message.text)
     if not code:
-        await message.answer("❌ Код не может быть пустым. Попробуйте еще раз:")
+        await message.answer("Код не распознан. Попробуйте ещё раз.")
         return
-
-    # Ask for campaign
-    await state.update_data(coupon_code=code)
-    await state.set_state(ADMIN_ADD_COUPON_CAMPAIGN)
+    await state.update_data(code=code)
+    await AdminCouponStates.waiting_campaign.set()
     await message.answer(
-        f"Код купона: <code>{code}</code>\n\n"
-        "Теперь отправьте название кампании (например: intensive)\n"
-        "или отправьте '-' чтобы оставить пустым.",
+        "Укажите кампанию для купона или отправьте «-», чтобы оставить пустым."
     )
 
 
-async def handle_add_coupon_campaign(message: types.Message, state: FSMContext) -> None:
-    """Handle campaign input and save coupon."""
-    if not is_admin(message.from_user.id):
+async def message_admin_coupon_campaign(message: types.Message, state: FSMContext) -> None:
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
-
-    if message.text == "❌ Отмена":
-        await state.finish()
-        await message.answer(
-            "Отменено",
-            reply_markup=kb_main_menu(is_admin=True),
-        )
+    if not message.text:
+        await message.answer("Пришлите кампанию текстом или «-».")
         return
-
-    campaign = message.text.strip() if message.text.strip() != "-" else ""
+    raw = safe_text(message.text)
+    campaign = raw
+    if raw in {"-", "—", "нет", "без", "none"}:
+        campaign = ""
     data = await state.get_data()
-    code = data.get("coupon_code", "")
-
-    # Add coupon
-    success = await coupons.add_coupon(code, campaign)
-
-    if success:
-        campaign_text = f" (кампания: {campaign})" if campaign else ""
-        await message.answer(
-            f"✅ Купон <code>{code}</code>{campaign_text} успешно добавлен!",
-            reply_markup=kb_main_menu(is_admin=True),
-        )
-    else:
-        await message.answer(
-            "❌ Ошибка при добавлении купона",
-            reply_markup=kb_main_menu(is_admin=True),
-        )
-
-    await state.finish()
-
-
-async def handle_add_bulk_codes(message: types.Message, state: FSMContext) -> None:
-    """Handle bulk coupon codes input."""
-    if not is_admin(message.from_user.id):
-        return
-
-    if message.text == "❌ Отмена":
+    code = safe_text(data.get("code")) if isinstance(data, dict) else ""
+    if not code:
         await state.finish()
-        await message.answer(
-            "Отменено",
-            reply_markup=kb_main_menu(is_admin=True),
-        )
+        await message.answer("Не удалось получить код. Попробуйте снова.", reply_markup=_admin_panel_kb())
         return
-
-    lines = [line.strip() for line in message.text.split("\n") if line.strip()]
-    if not lines:
-        await message.answer("❌ Не найдено ни одного купона. Попробуйте еще раз:")
-        return
-
-    # Ask for campaign
-    await state.update_data(coupon_codes=lines)
-    await state.set_state(ADMIN_ADD_BULK_CAMPAIGN)
-    await message.answer(
-        f"Найдено купонов: {len(lines)}\n\n"
-        "Теперь отправьте название кампании (например: intensive)\n"
-        "или отправьте '-' чтобы оставить пустым.",
+    await sheets.append(
+        "coupons",
+        {
+            "code": code,
+            "status": "free",
+            "campaign": campaign,
+        },
     )
-
-
-async def handle_add_bulk_campaign(message: types.Message, state: FSMContext) -> None:
-    """Handle campaign input and save bulk coupons."""
-    if not is_admin(message.from_user.id):
-        return
-
-    if message.text == "❌ Отмена":
-        await state.finish()
-        await message.answer(
-            "Отменено",
-            reply_markup=kb_main_menu(is_admin=True),
-        )
-        return
-
-    campaign = message.text.strip() if message.text.strip() != "-" else ""
-    data = await state.get_data()
-    codes = data.get("coupon_codes", [])
-
-    # Add coupons
-    count = await coupons.add_multiple_coupons(codes, campaign)
-
-    campaign_text = f" в кампанию '{campaign}'" if campaign else ""
-    await message.answer(
-        f"✅ Добавлено купонов{campaign_text}: {count} из {len(codes)}",
-        reply_markup=kb_main_menu(is_admin=True),
-    )
-
     await state.finish()
+    campaign_note = campaign or "без кампании"
+    await message.answer(
+        f"Купон добавлен: <b>{code}</b> ({campaign_note}).",
+        reply_markup=_admin_panel_kb(),
+    )
 
 
 def register(dp: Dispatcher) -> None:
     dp.register_message_handler(cmd_ping, commands=["ping"], state="*")
     dp.register_message_handler(cmd_report, commands=["report"], state="*")
-
-    # Admin panel
+    dp.register_message_handler(cmd_admin, commands=["admin"], state="*")
+    dp.register_message_handler(cmd_admin, lambda message: message.text == "Админ-панель", state="*")
+    dp.register_message_handler(cmd_cancel, commands=["cancel"], state="*")
+    dp.register_callback_query_handler(callback_admin_report, lambda c: c.data == "admin_report")
+    dp.register_callback_query_handler(callback_admin_add_coupon, lambda c: c.data == "admin_add_coupon")
     dp.register_message_handler(
-        handle_admin_panel,
-        lambda message: message.text == "⚙️ Админ панель",
-        state="*",
-    )
-    dp.register_callback_query_handler(
-        callback_admin_action,
-        lambda c: c.data.startswith("admin:"),
-        state="*",
-    )
-
-    # Add single coupon flow
-    dp.register_message_handler(
-        handle_add_coupon_code,
-        state=ADMIN_ADD_COUPON,
+        message_admin_coupon_code,
+        state=AdminCouponStates.waiting_code,
+        content_types=types.ContentTypes.TEXT,
     )
     dp.register_message_handler(
-        handle_add_coupon_campaign,
-        state=ADMIN_ADD_COUPON_CAMPAIGN,
-    )
-
-    # Add bulk coupons flow
-    dp.register_message_handler(
-        handle_add_bulk_codes,
-        state=ADMIN_ADD_BULK,
-    )
-    dp.register_message_handler(
-        handle_add_bulk_campaign,
-        state=ADMIN_ADD_BULK_CAMPAIGN,
+        message_admin_coupon_campaign,
+        state=AdminCouponStates.waiting_campaign,
+        content_types=types.ContentTypes.TEXT,
     )

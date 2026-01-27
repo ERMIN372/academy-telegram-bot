@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from html import escape
 
 from aiogram import Dispatcher, types
@@ -20,6 +21,20 @@ from app.storage import db
 from app.utils import safe_text
 
 logger = logging.getLogger(__name__)
+
+MEDIA_DIR = Path(__file__).resolve().parents[2]
+WELCOME_VIDEO = MEDIA_DIR / "IMG_3109.MP4"
+WELCOME_TEXT = (
+    "👋 Добрый день! Рады приветствовать вас в нашем Телеграм-боте!\n\n"
+    "Я – Академик, ваш проводник по миру знаний и возможностей нашей Академии.\n"
+    "Здесь вы сможете:\n"
+    "🎁 Получать подарки и бонусы\n"
+    "📚 Получать полезные материалы после наших мероприятий\n"
+    "❓ Задавать вопросы о наших программах\n"
+    "📝 Записываться на курсы и оставлять заявки\n\n"
+    "Чтобы получить первый подарок и всегда быть в курсе всех событий Академии — "
+    "подпишитесь на наш канал @campus_neftmbk"
+)
 
 
 def _meta(user_id: int, campaign: str, username: str | None, extra: dict | None = None) -> dict:
@@ -79,7 +94,7 @@ async def _prompt_leave_phone(
     )
     from app.keyboards.common import kb_send_contact
 
-    await message.answer("Отправь, пожалуйста, свой номер.", reply_markup=kb_send_contact())
+    await message.answer("Отправьте, пожалуйста, ваш номер.", reply_markup=kb_send_contact())
 
 
 async def cmd_start(message: types.Message, state: FSMContext) -> None:
@@ -123,7 +138,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             reply_markup=subscribe_markup,
         )
         await message.answer(
-            "Когда подпишешься, нажми кнопку ниже.",
+            "Когда подпишетесь, нажмите кнопку ниже.",
             reply_markup=kb_check_sub(campaign),
         )
         return
@@ -168,7 +183,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             )
             from app.handlers import lottery as lottery_handlers
 
-            await message.answer("Привет! Ты уже в клубе — запускаем розыгрыш.")
+            await message.answer("Привет! Вы уже в клубе — запускаем розыгрыш.")
             await lottery_handlers.present_lottery(
                 message,
                 message.from_user.id,
@@ -180,12 +195,16 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             await state.update_data(lottery_autostart=None)
             return
 
+    if WELCOME_VIDEO.exists():
+        await message.answer_video(
+            types.InputFile(str(WELCOME_VIDEO)),
+            caption=WELCOME_TEXT,
+            reply_markup=subscribe_markup,
+        )
+    else:
+        await message.answer(WELCOME_TEXT, reply_markup=subscribe_markup)
     await message.answer(
-        "Привет! Чтобы получить подарок, подпишись на канал и вернись сюда за проверкой.",
-        reply_markup=subscribe_markup,
-    )
-    await message.answer(
-        "Когда подпишешься, нажми кнопку ниже.",
+        "Когда подпишетесь, нажмите кнопку ниже.",
         reply_markup=kb_check_sub(campaign),
     )
 
@@ -244,12 +263,12 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
             lottery_label=config.button_label,
         )
         await call.message.answer(
-            "Отлично! Теперь забери свой подарок.",
+            "Отлично! Теперь заберите ваш подарок.",
             reply_markup=keyboard,
         )
         await call.message.answer(
             "Дополнительные опции находятся на клавиатуре ниже.",
-            reply_markup=kb_main_menu(is_admin=is_admin(call.from_user.id)),
+            reply_markup=kb_main_menu(call.from_user.id, call.from_user.username),
         )
         data = await state.get_data()
         autostart = data.get("lottery_autostart") if isinstance(data, dict) else None
@@ -282,20 +301,27 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
             ),
             username=username,
         )
-        await call.message.answer("Похоже, подписка еще не оформлена. Попробуй снова позже.")
+        await call.message.answer("Похоже, подписка еще не оформлена. Попробуйте снова позже.")
 
 
 async def _send_coupon(message: types.Message, code: str, campaign: str) -> None:
     code_text = safe_text(code)
     text = (
-        f"Твой уникальный купон: <b>{escape(code_text)}</b>\n\n"
+        f"Ваш уникальный купон: <b>{escape(code_text)}</b>\n\n"
         "Условия использования:\n"
         "• Купон не суммируется с другими акциями.\n"
         "• Не подходит для продления действующей подписки.\n"
         "• Действует до дедлайна кампании.\n\n"
-        "Оставь контакт, чтобы получить напоминание и инструкции."
+        "Оставьте контакт, чтобы получить напоминание и инструкции."
     )
-    await message.answer(text, reply_markup=kb_after_coupon(campaign, is_admin=is_admin(message.from_user.id)))
+    await message.answer(
+        text,
+        reply_markup=kb_after_coupon(
+            campaign,
+            message.from_user.id,
+            message.from_user.username,
+        ),
+    )
 
 
 async def issue_coupon(
@@ -313,46 +339,50 @@ async def issue_coupon(
     raw_username = message.from_user.username if message.from_user else None
     username = safe_text(raw_username) or None
 
-    stored = await db.fetch_user_coupon(user_id, coupon_campaign)
-    if stored and stored.get("code"):
-        code = safe_text(stored["code"])
+    already_has_coupon = await db.has_any_coupon(user_id)
+    if already_has_coupon:
         await stats.log_event(
             user_id,
             stats_campaign,
-            "gift_repeat",
+            "gift_blocked",
             _meta(
                 user_id,
                 stats_campaign,
                 username,
-                {"code": code, "coupon_campaign": coupon_campaign},
+                {"reason": "already_issued"},
             ),
             username=username,
         )
-        await alerts.reset_no_coupons(coupon_campaign)
-        await _send_coupon(message, code, coupon_campaign)
-        await reminders.schedule_reminder(user_id, coupon_campaign, code)
-        return True
+        await message.answer(
+            "Подарок можно получить только один раз — он уже был выдан при первом входе в бота."
+        )
+        return False
 
-    sheet_coupon = await coupons.get_user_coupon(user_id, coupon_campaign)
-    if sheet_coupon and sheet_coupon.get("code"):
-        code = safe_text(sheet_coupon["code"])
-        await db.insert_coupon(user_id, coupon_campaign, code)
+    sheet_existing = await coupons.get_user_coupon(user_id)
+    if sheet_existing and sheet_existing.get("code"):
+        code = safe_text(sheet_existing["code"])
+        existing_campaign = safe_text(sheet_existing.get("campaign")) or coupon_campaign
+        await db.insert_coupon(user_id, existing_campaign, code)
         await stats.log_event(
             user_id,
             stats_campaign,
-            "gift_repeat",
+            "gift_blocked",
             _meta(
                 user_id,
                 stats_campaign,
                 username,
-                {"code": code, "coupon_campaign": coupon_campaign},
+                {
+                    "reason": "already_issued_sheet",
+                    "code": code,
+                    "coupon_campaign": existing_campaign,
+                },
             ),
             username=username,
         )
-        await alerts.reset_no_coupons(coupon_campaign)
-        await _send_coupon(message, code, coupon_campaign)
-        await reminders.schedule_reminder(user_id, coupon_campaign, code)
-        return True
+        await message.answer(
+            "Подарок можно получить только один раз — он уже был выдан при первом входе в бота."
+        )
+        return False
 
     coupon = await coupons.find_first_free_coupon(coupon_campaign)
     if not coupon or not coupon.get("code"):

@@ -7,6 +7,8 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
+from app.config import is_admin_user
+
 
 def kb_subscribe(url: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(row_width=1)
@@ -26,17 +28,21 @@ def kb_get_gift(campaign: str) -> InlineKeyboardMarkup:
     return kb
 
 
-def kb_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
+def kb_main_menu(user_id: int | None = None, username: str | None = None) -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(KeyboardButton(text="📞 Оставить контакт"))
     kb.add(KeyboardButton(text="🥐 Производственный интенсив"))
-    if is_admin:
-        kb.add(KeyboardButton(text="⚙️ Админ панель"))
+    if is_admin_user(user_id, username):
+        kb.add(KeyboardButton(text="Админ-панель"))
     return kb
 
 
-def kb_after_coupon(campaign: str, is_admin: bool = False) -> ReplyKeyboardMarkup:
-    return kb_main_menu(is_admin=is_admin)
+def kb_after_coupon(
+    campaign: str,
+    user_id: int | None = None,
+    username: str | None = None,
+) -> ReplyKeyboardMarkup:
+    return kb_main_menu(user_id=user_id, username=username)
 
 
 def kb_send_contact() -> ReplyKeyboardMarkup:

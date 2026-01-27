@@ -236,6 +236,10 @@ async def get_draw(user_id: int, campaign: str) -> LotteryDraw | None:
     )
 
 
+async def has_any_draw(user_id: int) -> bool:
+    return await db.has_any_lottery_draw(user_id)
+
+
 async def mark_claimed(user_id: int, campaign: str) -> None:
     await db.mark_lottery_claimed(user_id, campaign, dt.datetime.utcnow().isoformat())
 

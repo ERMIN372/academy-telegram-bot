@@ -27,7 +27,7 @@ MVP Telegram-бот для образовательных кампаний. По
 | `MODE` | `polling` (по умолчанию) или `webhook`. |
 | `WEBHOOK_URL` | Публичный HTTPS-адрес приложения. Используется только в режиме webhook. |
 | `SECRET_TOKEN` | Значение заголовка `X-Telegram-Bot-Api-Secret-Token` для верификации запросов Telegram. |
-| `ADMIN_CHAT_ID` | Chat ID для админ-алёртов. Можно указать несколько через запятую (`служебный_чат,личный_ID`) для fallback. |
+| `ADMIN_CHAT_ID` | Chat ID или @username для админ-алёртов. Можно указать несколько через запятую (`служебный_чат,личный_ID,@admin`) для fallback. |
 | `CHANNEL_USERNAME` | Username канала (с `@`), на который проверяется подписка. |
 | `GOOGLE_SHEETS_ID` | Идентификатор Google Sheets (часть URL между `/d/` и `/edit`). |
 | `GOOGLE_SERVICE_JSON_B64` | base64-строка от JSON-ключа сервисного аккаунта. |
@@ -48,7 +48,7 @@ MVP Telegram-бот для образовательных кампаний. По
 | `QA_UNKNOWN_ANSWER` | Кастомный текст ответа при неизвестной теме. |
 | `QA_RATE_LIMIT_SECONDS` | Минимальный интервал между ответами одному пользователю (секунды). |
 
-> `ADMIN_CHAT_ID` можно узнать через @userinfobot или @RawDataBot — отправьте /start и используйте отображённый `id`.
+> `ADMIN_CHAT_ID` можно узнать через @userinfobot или @RawDataBot — отправьте /start и используйте отображённый `id`. При использовании username указывайте без пробелов (с `@` или без). 
 
 ### Что такое `campaign`
 

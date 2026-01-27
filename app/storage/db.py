@@ -107,6 +107,18 @@ async def fetch_user_coupon(user_id: int, campaign: str) -> Optional[dict]:
         return None
 
 
+async def has_any_coupon(user_id: int) -> bool:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        cursor = await db.execute(
+            "SELECT 1 FROM issued WHERE user_id=? LIMIT 1",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        return row is not None
+
+
 async def insert_coupon(user_id: int, campaign: str, code: str) -> None:
     await init_db()
     async with aiosqlite.connect(_db_file) as db:
@@ -130,6 +142,18 @@ async def get_lead(user_id: int, campaign: str) -> Optional[Dict[str, Any]]:
         if row is None:
             return None
         return dict(row)
+
+
+async def has_any_lottery_draw(user_id: int) -> bool:
+    await init_db()
+    async with aiosqlite.connect(_db_file) as db:
+        cursor = await db.execute(
+            "SELECT 1 FROM lottery_draws WHERE user_id=? LIMIT 1",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        return row is not None
 
 
 async def upsert_lead(user_id: int, campaign: str) -> None:

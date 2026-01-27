@@ -328,7 +328,7 @@ class ReminderScheduler:
             await bot.send_message(
                 key.user_id,
                 text,
-                reply_markup=kb_after_coupon(key.campaign, is_admin=is_admin(key.user_id)),
+                reply_markup=kb_after_coupon(key.campaign, key.user_id),
             )
         except (BotBlocked, ChatNotFound):
             await self._mark_cancelled(key, "unreachable")
