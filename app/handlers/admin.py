@@ -4,7 +4,7 @@ from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-from app.config import get_settings
+from app.config import get_settings, is_admin_user
 from app.services import sheets
 from app.utils import safe_text
 
@@ -14,21 +14,14 @@ class AdminCouponStates(StatesGroup):
     waiting_campaign = State()
 
 
-def _is_admin(user_id: int) -> bool:
-    settings = get_settings()
-    if not settings.admin_chat_ids:
-        return False
-    return user_id in settings.admin_chat_ids
-
-
 async def cmd_ping(message: types.Message) -> None:
-    if not _is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id):
         return
     await message.answer("pong")
 
 
 async def cmd_report(message: types.Message) -> None:
-    if not _is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id):
         return
     events = await sheets.read("events")
     leads = await sheets.read("leads")
@@ -54,21 +47,21 @@ def _admin_panel_kb() -> types.InlineKeyboardMarkup:
 
 
 async def cmd_admin(message: types.Message, state: FSMContext) -> None:
-    if not _is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id):
         return
     await state.finish()
     await message.answer("Админ-панель:", reply_markup=_admin_panel_kb())
 
 
 async def cmd_cancel(message: types.Message, state: FSMContext) -> None:
-    if not _is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id):
         return
     await state.finish()
     await message.answer("Действие отменено.", reply_markup=_admin_panel_kb())
 
 
 async def callback_admin_report(call: types.CallbackQuery) -> None:
-    if not _is_admin(call.from_user.id):
+    if not is_admin_user(call.from_user.id):
         await call.answer()
         return
     await call.answer()
@@ -76,7 +69,7 @@ async def callback_admin_report(call: types.CallbackQuery) -> None:
 
 
 async def callback_admin_add_coupon(call: types.CallbackQuery, state: FSMContext) -> None:
-    if not _is_admin(call.from_user.id):
+    if not is_admin_user(call.from_user.id):
         await call.answer()
         return
     await call.answer()
@@ -88,7 +81,7 @@ async def callback_admin_add_coupon(call: types.CallbackQuery, state: FSMContext
 
 
 async def message_admin_coupon_code(message: types.Message, state: FSMContext) -> None:
-    if not _is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id):
         return
     if not message.text:
         await message.answer("Пришлите текстовый код купона.")
@@ -105,7 +98,7 @@ async def message_admin_coupon_code(message: types.Message, state: FSMContext) -
 
 
 async def message_admin_coupon_campaign(message: types.Message, state: FSMContext) -> None:
-    if not _is_admin(message.from_user.id):
+    if not is_admin_user(message.from_user.id):
         return
     if not message.text:
         await message.answer("Пришлите кампанию текстом или «-».")
@@ -140,6 +133,7 @@ def register(dp: Dispatcher) -> None:
     dp.register_message_handler(cmd_ping, commands=["ping"], state="*")
     dp.register_message_handler(cmd_report, commands=["report"], state="*")
     dp.register_message_handler(cmd_admin, commands=["admin"], state="*")
+    dp.register_message_handler(cmd_admin, lambda message: message.text == "Админ-панель", state="*")
     dp.register_message_handler(cmd_cancel, commands=["cancel"], state="*")
     dp.register_callback_query_handler(callback_admin_report, lambda c: c.data == "admin_report")
     dp.register_callback_query_handler(callback_admin_add_coupon, lambda c: c.data == "admin_add_coupon")

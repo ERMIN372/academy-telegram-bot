@@ -36,7 +36,7 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
         await state.update_data(lead_context=None)
         await message.answer(
             "Хорошо, действия доступны на клавиатуре ниже.",
-            reply_markup=kb_main_menu(),
+            reply_markup=kb_main_menu(message.from_user.id),
         )
         return
 
@@ -133,7 +133,7 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
     )
     await message.answer(
         "Если понадобится, воспользуйтесь клавиатурой ниже.",
-        reply_markup=kb_main_menu(),
+        reply_markup=kb_main_menu(message.from_user.id),
     )
     await alerts.notify_new_lead(
         message.bot,

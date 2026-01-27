@@ -320,3 +320,10 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+def is_admin_user(user_id: int | None) -> bool:
+    if user_id is None:
+        return False
+    settings = get_settings()
+    return user_id in settings.admin_chat_ids
