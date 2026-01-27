@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
@@ -15,7 +16,16 @@ from app.services import reminders
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> None:
+    await reminders.on_startup(bot)
+    try:
+        yield
+    finally:
+        await reminders.on_shutdown()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")
@@ -35,16 +45,6 @@ async def tg_webhook(request: Request) -> JSONResponse:
     Bot.set_current(bot)
     await dp.process_update(update)
     return JSONResponse({"ok": True})
-
-
-@app.on_event("startup")
-async def on_app_startup() -> None:
-    await reminders.on_startup(bot)
-
-
-@app.on_event("shutdown")
-async def on_app_shutdown() -> None:
-    await reminders.on_shutdown()
 
 
 async def setup_webhook() -> None:
