@@ -15,13 +15,13 @@ class AdminCouponStates(StatesGroup):
 
 
 async def cmd_ping(message: types.Message) -> None:
-    if not is_admin_user(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     await message.answer("pong")
 
 
 async def cmd_report(message: types.Message) -> None:
-    if not is_admin_user(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     events = await sheets.read("events")
     leads = await sheets.read("leads")
@@ -47,21 +47,21 @@ def _admin_panel_kb() -> types.InlineKeyboardMarkup:
 
 
 async def cmd_admin(message: types.Message, state: FSMContext) -> None:
-    if not is_admin_user(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     await state.finish()
     await message.answer("Админ-панель:", reply_markup=_admin_panel_kb())
 
 
 async def cmd_cancel(message: types.Message, state: FSMContext) -> None:
-    if not is_admin_user(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     await state.finish()
     await message.answer("Действие отменено.", reply_markup=_admin_panel_kb())
 
 
 async def callback_admin_report(call: types.CallbackQuery) -> None:
-    if not is_admin_user(call.from_user.id):
+    if not is_admin_user(call.from_user.id, call.from_user.username):
         await call.answer()
         return
     await call.answer()
@@ -69,7 +69,7 @@ async def callback_admin_report(call: types.CallbackQuery) -> None:
 
 
 async def callback_admin_add_coupon(call: types.CallbackQuery, state: FSMContext) -> None:
-    if not is_admin_user(call.from_user.id):
+    if not is_admin_user(call.from_user.id, call.from_user.username):
         await call.answer()
         return
     await call.answer()
@@ -81,7 +81,7 @@ async def callback_admin_add_coupon(call: types.CallbackQuery, state: FSMContext
 
 
 async def message_admin_coupon_code(message: types.Message, state: FSMContext) -> None:
-    if not is_admin_user(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     if not message.text:
         await message.answer("Пришлите текстовый код купона.")
@@ -98,7 +98,7 @@ async def message_admin_coupon_code(message: types.Message, state: FSMContext) -
 
 
 async def message_admin_coupon_campaign(message: types.Message, state: FSMContext) -> None:
-    if not is_admin_user(message.from_user.id):
+    if not is_admin_user(message.from_user.id, message.from_user.username):
         return
     if not message.text:
         await message.answer("Пришлите кампанию текстом или «-».")

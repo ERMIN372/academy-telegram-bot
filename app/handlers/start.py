@@ -268,7 +268,7 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
         )
         await call.message.answer(
             "Дополнительные опции находятся на клавиатуре ниже.",
-            reply_markup=kb_main_menu(call.from_user.id),
+            reply_markup=kb_main_menu(call.from_user.id, call.from_user.username),
         )
         data = await state.get_data()
         autostart = data.get("lottery_autostart") if isinstance(data, dict) else None
@@ -314,7 +314,14 @@ async def _send_coupon(message: types.Message, code: str, campaign: str) -> None
         "• Действует до дедлайна кампании.\n\n"
         "Оставьте контакт, чтобы получить напоминание и инструкции."
     )
-    await message.answer(text, reply_markup=kb_after_coupon(campaign, message.from_user.id))
+    await message.answer(
+        text,
+        reply_markup=kb_after_coupon(
+            campaign,
+            message.from_user.id,
+            message.from_user.username,
+        ),
+    )
 
 
 async def issue_coupon(
