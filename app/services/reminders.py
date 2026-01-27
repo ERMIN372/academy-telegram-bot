@@ -11,7 +11,7 @@ from aiogram import Bot
 from aiogram.utils.exceptions import BotBlocked, ChatNotFound, RetryAfter, TelegramAPIError
 from zoneinfo import ZoneInfo
 
-from app.config import get_settings
+from app.config import get_settings, is_admin
 from app.keyboards.common import kb_after_coupon
 from app.services import coupons, stats
 from app.utils import safe_text

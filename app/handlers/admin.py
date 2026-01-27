@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -8,6 +10,7 @@ from app.config import get_settings, is_admin_user
 from app.services import sheets
 from app.utils import safe_text
 
+logger = logging.getLogger(__name__)
 
 class AdminCouponStates(StatesGroup):
     waiting_code = State()
@@ -25,12 +28,12 @@ async def cmd_report(message: types.Message) -> None:
         return
     events = await sheets.read("events")
     leads = await sheets.read("leads")
-    coupons = await sheets.read("coupons")
+    coupons_data = await sheets.read("coupons")
     text = (
         "Отчет:\n"
         f"Событий: {len(events)}\n"
         f"Лидов: {len(leads)}\n"
-        f"Купонов в таблице: {len(coupons)}"
+        f"Купонов в таблице: {len(coupons_data)}"
     )
     await message.answer(text)
 

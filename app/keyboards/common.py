@@ -50,3 +50,18 @@ def kb_send_contact() -> ReplyKeyboardMarkup:
     kb.add(KeyboardButton(text="📞 Отправить номер", request_contact=True))
     kb.add(KeyboardButton(text="Отмена"))
     return kb
+
+
+def kb_admin_panel() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(InlineKeyboardButton(text="➕ Добавить купон", callback_data="admin:add_coupon"))
+    kb.add(InlineKeyboardButton(text="➕ Добавить несколько купонов", callback_data="admin:add_bulk"))
+    kb.add(InlineKeyboardButton(text="📊 Статистика", callback_data="admin:stats"))
+    kb.add(InlineKeyboardButton(text="❌ Закрыть", callback_data="admin:close"))
+    return kb
+
+
+def kb_cancel_admin() -> ReplyKeyboardMarkup:
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    kb.add(KeyboardButton(text="❌ Отмена"))
+    return kb
