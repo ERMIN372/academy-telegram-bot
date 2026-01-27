@@ -359,9 +359,17 @@ def get_settings() -> Settings:
 def is_admin_user(user_id: int | None, username: str | None = None) -> bool:
     """Check if user is admin based on ADMIN_CHAT_ID (ID or username)."""
     settings = get_settings()
+    logging.info(
+        f"is_admin_user check: user_id={user_id}, username={username}, "
+        f"admin_ids={settings.admin_chat_ids}, admin_usernames={settings.admin_usernames}"
+    )
     if user_id is not None and user_id in settings.admin_chat_ids:
+        logging.info(f"User {user_id} is admin by ID")
         return True
     if username:
         normalized = username.lstrip("@").lower()
-        return normalized in settings.admin_usernames
+        if normalized in settings.admin_usernames:
+            logging.info(f"User @{username} is admin by username")
+            return True
+    logging.info(f"User {user_id}/@{username} is NOT admin")
     return False
