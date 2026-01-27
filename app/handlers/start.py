@@ -7,7 +7,7 @@ from html import escape
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 
-from app.config import get_settings, is_admin
+from app.config import get_settings, is_admin_user
 from app.keyboards.common import (
     kb_after_coupon,
     kb_check_sub,

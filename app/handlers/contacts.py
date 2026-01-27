@@ -6,7 +6,7 @@ import logging
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 
-from app.config import get_settings, is_admin
+from app.config import get_settings, is_admin_user
 from app.handlers import intensive as intensive_handlers
 from app.keyboards.common import kb_main_menu, kb_send_contact
 from app.services import alerts, phone, reminders, sheets, stats
