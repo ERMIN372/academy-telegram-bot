@@ -352,10 +352,12 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
+    """Get application settings."""
     return Settings()
 
 
 def is_admin_user(user_id: int | None, username: str | None = None) -> bool:
+    """Check if user is admin based on ADMIN_CHAT_ID (ID or username)."""
     settings = get_settings()
     if user_id is not None and user_id in settings.admin_chat_ids:
         return True
