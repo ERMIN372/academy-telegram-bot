@@ -30,6 +30,7 @@ def kb_main_menu() -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(KeyboardButton(text="📞 Оставить контакт"))
     kb.add(KeyboardButton(text="🥐 Производственный интенсив"))
+    kb.add(KeyboardButton(text="Админ-панель"))
     return kb
 
 
