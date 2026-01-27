@@ -332,46 +332,50 @@ async def issue_coupon(
     raw_username = message.from_user.username if message.from_user else None
     username = safe_text(raw_username) or None
 
-    stored = await db.fetch_user_coupon(user_id, coupon_campaign)
-    if stored and stored.get("code"):
-        code = safe_text(stored["code"])
+    already_has_coupon = await db.has_any_coupon(user_id)
+    if already_has_coupon:
         await stats.log_event(
             user_id,
             stats_campaign,
-            "gift_repeat",
+            "gift_blocked",
             _meta(
                 user_id,
                 stats_campaign,
                 username,
-                {"code": code, "coupon_campaign": coupon_campaign},
+                {"reason": "already_issued"},
             ),
             username=username,
         )
-        await alerts.reset_no_coupons(coupon_campaign)
-        await _send_coupon(message, code, coupon_campaign)
-        await reminders.schedule_reminder(user_id, coupon_campaign, code)
-        return True
+        await message.answer(
+            "Подарок можно получить только один раз — он уже был выдан при первом входе в бота."
+        )
+        return False
 
-    sheet_coupon = await coupons.get_user_coupon(user_id, coupon_campaign)
-    if sheet_coupon and sheet_coupon.get("code"):
-        code = safe_text(sheet_coupon["code"])
-        await db.insert_coupon(user_id, coupon_campaign, code)
+    sheet_existing = await coupons.get_user_coupon(user_id)
+    if sheet_existing and sheet_existing.get("code"):
+        code = safe_text(sheet_existing["code"])
+        existing_campaign = safe_text(sheet_existing.get("campaign")) or coupon_campaign
+        await db.insert_coupon(user_id, existing_campaign, code)
         await stats.log_event(
             user_id,
             stats_campaign,
-            "gift_repeat",
+            "gift_blocked",
             _meta(
                 user_id,
                 stats_campaign,
                 username,
-                {"code": code, "coupon_campaign": coupon_campaign},
+                {
+                    "reason": "already_issued_sheet",
+                    "code": code,
+                    "coupon_campaign": existing_campaign,
+                },
             ),
             username=username,
         )
-        await alerts.reset_no_coupons(coupon_campaign)
-        await _send_coupon(message, code, coupon_campaign)
-        await reminders.schedule_reminder(user_id, coupon_campaign, code)
-        return True
+        await message.answer(
+            "Подарок можно получить только один раз — он уже был выдан при первом входе в бота."
+        )
+        return False
 
     coupon = await coupons.find_first_free_coupon(coupon_campaign)
     if not coupon or not coupon.get("code"):
