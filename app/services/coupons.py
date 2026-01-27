@@ -66,3 +66,38 @@ async def get_user_coupon(user_id: int, campaign: str | None = None) -> Optional
             "status": safe_text(record.get("status")),
         }
     return None
+
+
+async def add_coupon(code: str, campaign: str = "") -> bool:
+    """Add a new coupon to the coupons sheet."""
+    sanitized_code = safe_text(code)
+    sanitized_campaign = safe_text(campaign)
+
+    if not sanitized_code:
+        return False
+
+    timestamp = sheets.current_timestamp()
+    data = {
+        "code": sanitized_code,
+        "campaign": sanitized_campaign,
+        "status": "free",
+        "created_at": timestamp.utc_text,
+        "created_at_msk": timestamp.local_text,
+    }
+
+    await sheets.append(
+        COUPONS_SHEET,
+        data,
+        optional_headers=["created_at_msk"],
+        meta=timestamp.meta,
+    )
+    return True
+
+
+async def add_multiple_coupons(codes: list[str], campaign: str = "") -> int:
+    """Add multiple coupons at once. Returns count of added coupons."""
+    count = 0
+    for code in codes:
+        if await add_coupon(code, campaign):
+            count += 1
+    return count

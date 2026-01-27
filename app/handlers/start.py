@@ -6,7 +6,7 @@ from html import escape
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 
-from app.config import get_settings
+from app.config import get_settings, is_admin
 from app.keyboards.common import (
     kb_after_coupon,
     kb_check_sub,
@@ -249,7 +249,7 @@ async def callback_check_sub(call: types.CallbackQuery, state: FSMContext) -> No
         )
         await call.message.answer(
             "Дополнительные опции находятся на клавиатуре ниже.",
-            reply_markup=kb_main_menu(),
+            reply_markup=kb_main_menu(is_admin=is_admin(call.from_user.id)),
         )
         data = await state.get_data()
         autostart = data.get("lottery_autostart") if isinstance(data, dict) else None
@@ -295,7 +295,7 @@ async def _send_coupon(message: types.Message, code: str, campaign: str) -> None
         "• Действует до дедлайна кампании.\n\n"
         "Оставь контакт, чтобы получить напоминание и инструкции."
     )
-    await message.answer(text, reply_markup=kb_after_coupon(campaign))
+    await message.answer(text, reply_markup=kb_after_coupon(campaign, is_admin=is_admin(message.from_user.id)))
 
 
 async def issue_coupon(

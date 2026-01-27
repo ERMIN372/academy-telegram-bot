@@ -6,7 +6,7 @@ import logging
 from aiogram import Dispatcher, types
 from aiogram.dispatcher import FSMContext
 
-from app.config import get_settings
+from app.config import get_settings, is_admin
 from app.handlers import intensive as intensive_handlers
 from app.keyboards.common import kb_main_menu, kb_send_contact
 from app.services import alerts, phone, reminders, sheets, stats
@@ -36,7 +36,7 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
         await state.update_data(lead_context=None)
         await message.answer(
             "Хорошо, действия доступны на клавиатуре ниже.",
-            reply_markup=kb_main_menu(),
+            reply_markup=kb_main_menu(is_admin=is_admin(message.from_user.id)),
         )
         return
 
@@ -131,7 +131,7 @@ async def handle_contact(message: types.Message, state: FSMContext) -> None:
     )
     await message.answer(
         "Если понадобится, воспользуйся клавиатурой ниже.",
-        reply_markup=kb_main_menu(),
+        reply_markup=kb_main_menu(is_admin=is_admin(message.from_user.id)),
     )
     await alerts.notify_new_lead(
         message.bot,
