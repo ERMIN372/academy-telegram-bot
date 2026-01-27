@@ -110,6 +110,8 @@ class Settings(BaseSettings):
                 continue
             if item.startswith("chat:") or item.startswith("user:"):
                 item = item.split(":", 1)[1].strip()
+            if item.startswith("@"):
+                continue
             if not item or item in {"0", "-0"}:
                 continue
             try:
@@ -118,6 +120,37 @@ class Settings(BaseSettings):
                 continue
         seen: set[int] = set()
         unique: list[int] = []
+        for value in result:
+            if value in seen:
+                continue
+            seen.add(value)
+            unique.append(value)
+        return tuple(unique)
+
+    @cached_property
+    def admin_usernames(self) -> tuple[str, ...]:
+        raw_value = self.admin_chat_id_raw
+        if not raw_value:
+            return ()
+        if isinstance(raw_value, (list, tuple)):
+            values = [str(item).strip() for item in raw_value]
+        else:
+            values = [part.strip() for part in str(raw_value).replace(";", ",").split(",")]
+        result: list[str] = []
+        for item in values:
+            if not item:
+                continue
+            if item.startswith("chat:") or item.startswith("user:"):
+                item = item.split(":", 1)[1].strip()
+            if item.startswith("@"):
+                item = item[1:]
+            if not item:
+                continue
+            if item.lstrip("-").isdigit():
+                continue
+            result.append(item.lower())
+        seen: set[str] = set()
+        unique: list[str] = []
         for value in result:
             if value in seen:
                 continue
@@ -322,8 +355,11 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def is_admin_user(user_id: int | None) -> bool:
-    if user_id is None:
-        return False
+def is_admin_user(user_id: int | None, username: str | None = None) -> bool:
     settings = get_settings()
-    return user_id in settings.admin_chat_ids
+    if user_id is not None and user_id in settings.admin_chat_ids:
+        return True
+    if username:
+        normalized = username.lstrip("@").lower()
+        return normalized in settings.admin_usernames
+    return False
