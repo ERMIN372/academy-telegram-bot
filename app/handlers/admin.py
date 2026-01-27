@@ -141,8 +141,8 @@ def register(dp: Dispatcher) -> None:
     dp.register_message_handler(cmd_admin, commands=["admin"], state="*")
     dp.register_message_handler(cmd_admin, lambda message: message.text == "Админ-панель", state="*")
     dp.register_message_handler(cmd_cancel, commands=["cancel"], state="*")
-    dp.register_callback_query_handler(callback_admin_report, lambda c: c.data == "admin_report")
-    dp.register_callback_query_handler(callback_admin_add_coupon, lambda c: c.data == "admin_add_coupon")
+    dp.register_callback_query_handler(callback_admin_report, lambda c: c.data == "admin_report", state="*")
+    dp.register_callback_query_handler(callback_admin_add_coupon, lambda c: c.data == "admin_add_coupon", state="*")
     dp.register_message_handler(
         message_admin_coupon_code,
         state=AdminCouponStates.waiting_code,
