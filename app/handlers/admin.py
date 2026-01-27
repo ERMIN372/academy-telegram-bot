@@ -50,8 +50,11 @@ def _admin_panel_kb() -> types.InlineKeyboardMarkup:
 
 
 async def cmd_admin(message: types.Message, state: FSMContext) -> None:
+    logger.info(f"cmd_admin called: user_id={message.from_user.id}, username={message.from_user.username}")
     if not is_admin_user(message.from_user.id, message.from_user.username):
+        logger.warning(f"User {message.from_user.id} is not admin, blocking access")
         return
+    logger.info("Opening admin panel")
     await state.finish()
     await message.answer("Админ-панель:", reply_markup=_admin_panel_kb())
 
