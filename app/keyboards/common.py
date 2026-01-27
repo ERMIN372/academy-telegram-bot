@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -8,6 +10,8 @@ from aiogram.types import (
 )
 
 from app.config import is_admin_user
+
+logger = logging.getLogger(__name__)
 
 
 def kb_subscribe(url: str) -> InlineKeyboardMarkup:
@@ -32,7 +36,9 @@ def kb_main_menu(user_id: int | None = None, username: str | None = None) -> Rep
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(KeyboardButton(text="📞 Оставить контакт"))
     kb.add(KeyboardButton(text="🥐 Производственный интенсив"))
-    if is_admin_user(user_id, username):
+    is_admin = is_admin_user(user_id, username)
+    logger.info(f"kb_main_menu: user_id={user_id}, username={username}, is_admin={is_admin}")
+    if is_admin:
         kb.add(KeyboardButton(text="Админ-панель"))
     return kb
 
