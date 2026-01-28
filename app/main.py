@@ -41,8 +41,9 @@ async def tg_webhook(request: Request) -> JSONResponse:
         raise HTTPException(status_code=403, detail="Forbidden")
     data = await request.json()
     update = types.Update(**data)
-    # Set bot instance in context for webhook mode
+    # Set bot/dispatcher instances in context for webhook mode
     Bot.set_current(bot)
+    Dispatcher.set_current(dp)
     await dp.process_update(update)
     return JSONResponse({"ok": True})
 
